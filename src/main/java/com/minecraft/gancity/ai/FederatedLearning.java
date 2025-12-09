@@ -7,47 +7,35 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
- * Federated Learning System - Syncs learned knowledge to a Git repository
- * allowing all servers to benefit from collective learning while reducing
- * individual server storage pressure.
+ * Federated Learning System - Syncs learned knowledge via Cloudflare Worker API
+ * allowing all servers to benefit from collective learning with zero configuration.
  * 
  * Features:
- * - Automatic sync to configured Git repository
+ * - Automatic sync to Cloudflare Worker API (no Git required)
  * - Privacy-safe aggregation (no player identifiable data)
- * - Exponential backoff for failed syncs
- * - Conflict resolution via merge strategies
- * - Bandwidth optimization with compression
+ * - Works out-of-the-box for all players (no SSH/credentials needed)
+ * - Async operations (non-blocking gameplay)
+ * - Graceful degradation if API unavailable
  * 
  * Data Flow:
- * 1. Local server records successes/failures
- * 2. Periodically aggregates to federated format
- * 3. Pulls latest from Git repo
- * 4. Merges local + remote data (weighted average)
- * 5. Pushes aggregated data back
- * 6. All servers download and apply merged knowledge
+ * 1. Local server records combat outcomes
+ * 2. Periodically submits tactics to API (5 min interval)
+ * 3. Downloads aggregated global tactics from API (10 min interval)
+ * 4. Applies global knowledge to local AI systems
+ * 5. All servers contribute and benefit from collective learning
  */
 public class FederatedLearning {
     private static final Logger LOGGER = LogUtils.getLogger();
     
     // Sync Configuration
-    private static final long SYNC_INTERVAL_MS = 300_000; // 5 minutes
-    private static final long PULL_INTERVAL_MS = 600_000; // 10 minutes (download more often than push)
-    private static final int MAX_RETRY_ATTEMPTS = 3;
-    private static final long RETRY_BACKOFF_MS = 60_000; // 1 minute base backoff
+    private static final long SYNC_INTERVAL_MS = 300_000; // 5 minutes (submit)
+    private static final long PULL_INTERVAL_MS = 600_000; // 10 minutes (download)
+    private static final int MIN_DATA_POINTS = 10; // Minimum data before submitting
     
-    // File Paths
-    private Path localDataPath;
-    private Path federatedRepoPath;
-    private String repositoryUrl; // Git repository URL
-    
-    // Sync State
-    private long lastSyncTime = 0;
-    private long lastPullTime = 0;
-    private int consecutiveFailures = 0;
+    // Cloudflare API Client
+    private CloudflareAPIClient apiClient;
     private boolean syncEnabled = false;
     
     // Thread Pool for Async Operations
@@ -59,101 +47,112 @@ public class FederatedLearning {
         }
     );
     
-    // Aggregated Data Structures
-    private final Map<String, FederatedTactic> tacticAggregates = new ConcurrentHashMap<>();
-    private final Map<String, FederatedBehavior> behaviorAggregates = new ConcurrentHashMap<>();
+    // Local aggregation before submission
+    private final Map<String, TacticSubmission> pendingSubmissions = new ConcurrentHashMap<>();
     
     // Statistics
     private long totalDataPointsContributed = 0;
     private long totalDataPointsDownloaded = 0;
+    private long lastSyncTime = 0;
+    private long lastPullTime = 0;
     
-    public FederatedLearning(Path localDataPath, String repositoryUrl) {
-        this.localDataPath = localDataPath;
-        this.repositoryUrl = repositoryUrl;
-        this.syncEnabled = repositoryUrl != null && !repositoryUrl.isEmpty();
+    public FederatedLearning(Path localDataPath, String apiEndpoint) {
+        this.syncEnabled = apiEndpoint != null && !apiEndpoint.isEmpty();
         
         if (syncEnabled) {
-            // Detect Git repository path (same as ModelPersistence)
-            this.federatedRepoPath = detectFederatedRepoPath();
+            // Initialize Cloudflare API client
+            this.apiClient = new CloudflareAPIClient(apiEndpoint);
             
             // Schedule periodic sync operations
-            syncExecutor.scheduleAtFixedRate(this::pullFromRepository, 
+            syncExecutor.scheduleAtFixedRate(this::downloadGlobalTactics, 
                 PULL_INTERVAL_MS, PULL_INTERVAL_MS, TimeUnit.MILLISECONDS);
-            syncExecutor.scheduleAtFixedRate(this::pushToRepository, 
+            syncExecutor.scheduleAtFixedRate(this::submitLocalTactics, 
                 SYNC_INTERVAL_MS, SYNC_INTERVAL_MS, TimeUnit.MILLISECONDS);
             
-            LOGGER.info("Federated Learning enabled - Repository: {}", repositoryUrl);
-            LOGGER.info("Local cache: {}, Remote sync every {} minutes", 
-                localDataPath, SYNC_INTERVAL_MS / 60_000);
+            LOGGER.info("Federated Learning enabled - API: {}", apiEndpoint);
+            LOGGER.info("Auto-submit every {} minutes, auto-download every {} minutes", 
+                SYNC_INTERVAL_MS / 60_000, PULL_INTERVAL_MS / 60_000);
         } else {
-            LOGGER.info("Federated Learning disabled - Set 'federatedLearningRepo' in config to enable");
+            LOGGER.info("Federated Learning disabled - Set 'cloudApiEndpoint' in config to enable");
         }
     }
     
+    
     /**
-     * Detect the federated repository path based on launcher type
+     * Record a combat outcome for federated learning
+     * Aggregates locally before submitting to API
      */
-    private Path detectFederatedRepoPath() {
+    public void recordCombatOutcome(String mobType, String action, float reward, boolean success) {
+        if (!syncEnabled) return;
+        
+        String key = mobType + ":" + action;
+        TacticSubmission submission = pendingSubmissions.computeIfAbsent(key, 
+            k -> new TacticSubmission(mobType, action));
+        
+        submission.addOutcome(reward, success);
+        totalDataPointsContributed++;
+    }
+    
+    /**
+     * Submit accumulated local tactics to Cloudflare API
+     */
+    private void submitLocalTactics() {
+        if (!syncEnabled || pendingSubmissions.isEmpty()) return;
+        
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastSyncTime < SYNC_INTERVAL_MS) {
+            return; // Too soon
+        }
+        
+        // Check if we have enough data to contribute
+        if (totalDataPointsContributed < MIN_DATA_POINTS) {
+            LOGGER.debug("Not enough local data to contribute ({}), waiting for more...", 
+                totalDataPointsContributed);
+            return;
+        }
+        
         try {
-            // Use same detection logic as ModelPersistence
-            Path minecraftDir = Paths.get(System.getProperty("user.dir"));
+            LOGGER.info("Submitting {} local tactics to global repository...", pendingSubmissions.size());
             
-            // Check for common launcher patterns
-            String dirPath = minecraftDir.toString();
-            if (dirPath.contains("AppData\\Roaming\\.minecraft")) {
-                // Vanilla launcher
-                return minecraftDir.resolve("federated_learning");
-            } else if (dirPath.contains("ModrinthApp")) {
-                return minecraftDir.getParent().resolve("federated_learning");
-            } else if (dirPath.contains("PrismLauncher")) {
-                return minecraftDir.getParent().resolve("federated_learning");
-            } else if (dirPath.contains("MultiMC")) {
-                return minecraftDir.getParent().resolve("federated_learning");
-            } else if (dirPath.contains("curseforge\\minecraft\\Instances")) {
-                return minecraftDir.resolve("federated_learning");
-            } else if (dirPath.contains("ATLauncher\\instances")) {
-                return minecraftDir.resolve("federated_learning");
+            int successCount = 0;
+            int failCount = 0;
+            
+            // Submit each pending tactic
+            for (TacticSubmission submission : pendingSubmissions.values()) {
+                boolean success = apiClient.submitTactic(
+                    submission.mobType,
+                    submission.action,
+                    submission.getAverageReward(),
+                    submission.getSuccessRate() > 0.5f ? "success" : "failure"
+                );
+                
+                if (success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
             }
             
-            // Default fallback
-            return minecraftDir.resolve("federated_learning");
+            if (successCount > 0) {
+                LOGGER.info("Successfully submitted {} tactics ({} failed)", successCount, failCount);
+                lastSyncTime = currentTime;
+                
+                // Clear submitted tactics
+                pendingSubmissions.clear();
+                totalDataPointsContributed = 0;
+            } else {
+                LOGGER.warn("Failed to submit any tactics to API");
+            }
+            
         } catch (Exception e) {
-            LOGGER.error("Failed to detect federated repo path", e);
-            return Paths.get("federated_learning");
+            LOGGER.error("Error submitting tactics: {}", e.getMessage());
         }
     }
     
     /**
-     * Record a local success/failure for aggregation
-     * Privacy-safe: Only tactic ID and outcome, no player data
+     * Download global tactics from Cloudflare API
      */
-    public void recordLocalOutcome(String tacticId, String category, boolean success, Map<String, String> conditions) {
-        if (!syncEnabled) return;
-        
-        FederatedTactic tactic = tacticAggregates.computeIfAbsent(tacticId, id -> 
-            new FederatedTactic(id, category, new HashMap<>(conditions)));
-        
-        tactic.recordOutcome(success);
-        totalDataPointsContributed++;
-    }
-    
-    /**
-     * Record a behavior success for aggregation
-     */
-    public void recordBehaviorOutcome(String behaviorId, String mobType, boolean success) {
-        if (!syncEnabled) return;
-        
-        FederatedBehavior behavior = behaviorAggregates.computeIfAbsent(behaviorId, id ->
-            new FederatedBehavior(id, mobType));
-        
-        behavior.recordOutcome(success);
-        totalDataPointsContributed++;
-    }
-    
-    /**
-     * Pull latest aggregated data from Git repository
-     */
-    public void pullFromRepository() {
+    private void downloadGlobalTactics() {
         if (!syncEnabled) return;
         
         long currentTime = System.currentTimeMillis();
@@ -162,314 +161,55 @@ public class FederatedLearning {
         }
         
         try {
-            LOGGER.info("Pulling federated knowledge from repository...");
+            LOGGER.info("Downloading global tactics from API...");
             
-            // Execute git pull
-            boolean pullSuccess = executeGitPull();
+            Map<String, Object> tacticsData = apiClient.downloadTactics();
             
-            if (pullSuccess) {
-                // Load and merge downloaded data
-                mergeRemoteData();
+            if (tacticsData != null && !tacticsData.isEmpty()) {
+                applyGlobalTactics(tacticsData);
                 lastPullTime = currentTime;
-                consecutiveFailures = 0;
-                LOGGER.info("Successfully pulled federated data - {} tactics, {} behaviors", 
-                    tacticAggregates.size(), behaviorAggregates.size());
+                totalDataPointsDownloaded++;
+                
+                LOGGER.info("Successfully downloaded and applied global tactics");
             } else {
-                handleSyncFailure("Git pull failed");
+                LOGGER.warn("No global tactics available from API");
             }
             
         } catch (Exception e) {
-            handleSyncFailure("Pull error: " + e.getMessage());
+            LOGGER.error("Error downloading tactics: {}", e.getMessage());
         }
     }
     
     /**
-     * Push local aggregated data to Git repository
-     */
-    public void pushToRepository() {
-        if (!syncEnabled) return;
-        
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastSyncTime < SYNC_INTERVAL_MS) {
-            return; // Too soon
-        }
-        
-        // Check if we have enough data to contribute
-        if (totalDataPointsContributed < 10) {
-            LOGGER.debug("Not enough local data to contribute ({}), waiting for more...", 
-                totalDataPointsContributed);
-            return;
-        }
-        
-        try {
-            LOGGER.info("Pushing federated knowledge to repository...");
-            
-            // Save local aggregates to files
-            saveLocalAggregates();
-            
-            // Execute git add, commit, push
-            boolean pushSuccess = executeGitPush();
-            
-            if (pushSuccess) {
-                lastSyncTime = currentTime;
-                consecutiveFailures = 0;
-                LOGGER.info("Successfully pushed {} data points to federated repository", 
-                    totalDataPointsContributed);
-                totalDataPointsContributed = 0; // Reset counter after successful push
-            } else {
-                handleSyncFailure("Git push failed");
-            }
-            
-        } catch (Exception e) {
-            handleSyncFailure("Push error: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * Execute git pull command
-     */
-    private boolean executeGitPull() {
-        try {
-            // Ensure repository is cloned
-            if (!Files.exists(federatedRepoPath.resolve(".git"))) {
-                return executeGitClone();
-            }
-            
-            ProcessBuilder pb = new ProcessBuilder("git", "pull", "origin", "main");
-            pb.directory(federatedRepoPath.toFile());
-            pb.redirectErrorStream(true);
-            
-            Process process = pb.start();
-            int exitCode = process.waitFor();
-            
-            if (exitCode == 0) {
-                return true;
-            } else {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    LOGGER.warn("Git pull output: {}", line);
-                }
-                return false;
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to execute git pull", e);
-            return false;
-        }
-    }
-    
-    /**
-     * Execute git clone command (first time setup)
-     */
-    private boolean executeGitClone() {
-        try {
-            LOGGER.info("First time setup - Cloning federated repository...");
-            
-            Files.createDirectories(federatedRepoPath.getParent());
-            
-            ProcessBuilder pb = new ProcessBuilder("git", "clone", repositoryUrl, 
-                federatedRepoPath.toString());
-            pb.redirectErrorStream(true);
-            
-            Process process = pb.start();
-            int exitCode = process.waitFor();
-            
-            if (exitCode == 0) {
-                LOGGER.info("Successfully cloned federated repository");
-                return true;
-            } else {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    LOGGER.warn("Git clone output: {}", line);
-                }
-                return false;
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to execute git clone", e);
-            return false;
-        }
-    }
-    
-    /**
-     * Execute git add, commit, push commands
-     */
-    private boolean executeGitPush() {
-        try {
-            // Git add
-            ProcessBuilder addPb = new ProcessBuilder("git", "add", ".");
-            addPb.directory(federatedRepoPath.toFile());
-            Process addProcess = addPb.start();
-            addProcess.waitFor();
-            
-            // Git commit
-            String commitMessage = String.format("Federated update: %d data points", 
-                totalDataPointsContributed);
-            ProcessBuilder commitPb = new ProcessBuilder("git", "commit", "-m", commitMessage);
-            commitPb.directory(federatedRepoPath.toFile());
-            Process commitProcess = commitPb.start();
-            int commitExitCode = commitProcess.waitFor();
-            
-            // Check if there were changes to commit
-            if (commitExitCode != 0) {
-                LOGGER.debug("No changes to commit");
-                return true; // Not an error, just nothing new
-            }
-            
-            // Git push
-            ProcessBuilder pushPb = new ProcessBuilder("git", "push", "origin", "main");
-            pushPb.directory(federatedRepoPath.toFile());
-            pushPb.redirectErrorStream(true);
-            
-            Process pushProcess = pushPb.start();
-            int pushExitCode = pushProcess.waitFor();
-            
-            if (pushExitCode == 0) {
-                return true;
-            } else {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(pushProcess.getInputStream()));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    LOGGER.warn("Git push output: {}", line);
-                }
-                return false;
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to execute git push", e);
-            return false;
-        }
-    }
-    
-    /**
-     * Save local aggregates to files for Git commit
-     */
-    private void saveLocalAggregates() throws IOException {
-        Files.createDirectories(federatedRepoPath);
-        
-        // Save tactics
-        Path tacticsFile = federatedRepoPath.resolve("tactics.dat.gz");
-        try (GZIPOutputStream gzOut = new GZIPOutputStream(new FileOutputStream(tacticsFile.toFile()));
-             ObjectOutputStream out = new ObjectOutputStream(gzOut)) {
-            out.writeObject(new HashMap<>(tacticAggregates));
-        }
-        
-        // Save behaviors
-        Path behaviorsFile = federatedRepoPath.resolve("behaviors.dat.gz");
-        try (GZIPOutputStream gzOut = new GZIPOutputStream(new FileOutputStream(behaviorsFile.toFile()));
-             ObjectOutputStream out = new ObjectOutputStream(gzOut)) {
-            out.writeObject(new HashMap<>(behaviorAggregates));
-        }
-        
-        // Save metadata
-        Properties metadata = new Properties();
-        metadata.setProperty("last_update", String.valueOf(System.currentTimeMillis()));
-        metadata.setProperty("data_points", String.valueOf(totalDataPointsContributed));
-        metadata.setProperty("tactics_count", String.valueOf(tacticAggregates.size()));
-        metadata.setProperty("behaviors_count", String.valueOf(behaviorAggregates.size()));
-        
-        Path metadataFile = federatedRepoPath.resolve("metadata.properties");
-        try (FileOutputStream out = new FileOutputStream(metadataFile.toFile())) {
-            metadata.store(out, "Federated Learning Metadata");
-        }
-    }
-    
-    /**
-     * Load and merge remote data with local aggregates
+     * Apply downloaded global tactics to local AI systems
      */
     @SuppressWarnings("unchecked")
-    private void mergeRemoteData() {
+    private void applyGlobalTactics(Map<String, Object> tacticsData) {
         try {
-            // Load remote tactics
-            Path tacticsFile = federatedRepoPath.resolve("tactics.dat.gz");
-            if (Files.exists(tacticsFile)) {
-                try (GZIPInputStream gzIn = new GZIPInputStream(new FileInputStream(tacticsFile.toFile()));
-                     ObjectInputStream in = new ObjectInputStream(gzIn)) {
-                    Map<String, FederatedTactic> remoteTactics = 
-                        (Map<String, FederatedTactic>) in.readObject();
-                    
-                    // Merge with local data (weighted average)
-                    for (Map.Entry<String, FederatedTactic> entry : remoteTactics.entrySet()) {
-                        FederatedTactic remote = entry.getValue();
-                        FederatedTactic local = tacticAggregates.get(entry.getKey());
-                        
-                        if (local != null) {
-                            // Merge: weighted average based on sample count
-                            local.mergeWith(remote);
-                        } else {
-                            // New tactic from remote
-                            tacticAggregates.put(entry.getKey(), remote);
-                        }
-                    }
-                    
-                    totalDataPointsDownloaded += remoteTactics.size();
-                }
-            }
+            Map<String, Object> tactics = (Map<String, Object>) tacticsData.get("tactics");
+            if (tactics == null) return;
             
-            // Load remote behaviors
-            Path behaviorsFile = federatedRepoPath.resolve("behaviors.dat.gz");
-            if (Files.exists(behaviorsFile)) {
-                try (GZIPInputStream gzIn = new GZIPInputStream(new FileInputStream(behaviorsFile.toFile()));
-                     ObjectInputStream in = new ObjectInputStream(gzIn)) {
-                    Map<String, FederatedBehavior> remoteBehaviors = 
-                        (Map<String, FederatedBehavior>) in.readObject();
+            for (Map.Entry<String, Object> entry : tactics.entrySet()) {
+                String mobType = entry.getKey();
+                Map<String, Object> mobData = (Map<String, Object>) entry.getValue();
+                
+                List<Map<String, Object>> tacticList = (List<Map<String, Object>>) mobData.get("tactics");
+                if (tacticList != null && !tacticList.isEmpty()) {
+                    LOGGER.debug("Received {} global tactics for {}", tacticList.size(), mobType);
                     
-                    for (Map.Entry<String, FederatedBehavior> entry : remoteBehaviors.entrySet()) {
-                        FederatedBehavior remote = entry.getValue();
-                        FederatedBehavior local = behaviorAggregates.get(entry.getKey());
-                        
-                        if (local != null) {
-                            local.mergeWith(remote);
-                        } else {
-                            behaviorAggregates.put(entry.getKey(), remote);
-                        }
+                    // TODO: Integrate with MobBehaviorAI to influence action selection
+                    // For now, just log the best performing tactics
+                    for (int i = 0; i < Math.min(3, tacticList.size()); i++) {
+                        Map<String, Object> tactic = tacticList.get(i);
+                        LOGGER.info("Top {} tactic: {} (avg reward: {})", 
+                            mobType, tactic.get("action"), tactic.get("avgReward"));
                     }
-                    
-                    totalDataPointsDownloaded += remoteBehaviors.size();
                 }
             }
             
         } catch (Exception e) {
-            LOGGER.error("Failed to merge remote data", e);
+            LOGGER.error("Error applying global tactics: {}", e.getMessage());
         }
-    }
-    
-    /**
-     * Handle sync failures with exponential backoff
-     */
-    private void handleSyncFailure(String reason) {
-        consecutiveFailures++;
-        LOGGER.warn("Federated sync failed (attempt {}): {}", consecutiveFailures, reason);
-        
-        if (consecutiveFailures >= MAX_RETRY_ATTEMPTS) {
-            long backoffTime = RETRY_BACKOFF_MS * (long) Math.pow(2, consecutiveFailures - MAX_RETRY_ATTEMPTS);
-            LOGGER.warn("Multiple sync failures, backing off for {} seconds", backoffTime / 1000);
-            lastSyncTime = System.currentTimeMillis() + backoffTime;
-        }
-    }
-    
-    /**
-     * Get aggregated tactic success rate from federated data
-     */
-    public float getFederatedTacticSuccessRate(String tacticId) {
-        FederatedTactic tactic = tacticAggregates.get(tacticId);
-        return tactic != null ? tactic.getSuccessRate() : 0.5f;
-    }
-    
-    /**
-     * Get aggregated behavior success rate from federated data
-     */
-    public float getFederatedBehaviorSuccessRate(String behaviorId) {
-        FederatedBehavior behavior = behaviorAggregates.get(behaviorId);
-        return behavior != null ? behavior.getSuccessRate() : 0.5f;
-    }
-    
-    /**
-     * Get all federated tactics for a category
-     */
-    public List<FederatedTactic> getTacticsForCategory(String category) {
-        return tacticAggregates.values().stream()
-            .filter(t -> t.category.equals(category))
-            .toList();
     }
     
     /**
@@ -479,8 +219,11 @@ public class FederatedLearning {
         LOGGER.info("Shutting down Federated Learning system...");
         
         if (syncEnabled) {
-            // Final sync before shutdown
-            pushToRepository();
+            // Final submission before shutdown
+            submitLocalTactics();
+            
+            // Shutdown API client
+            apiClient.shutdown();
         }
         
         syncExecutor.shutdown();
@@ -488,6 +231,7 @@ public class FederatedLearning {
             syncExecutor.awaitTermination(30, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             LOGGER.warn("Federated Learning shutdown interrupted");
+            Thread.currentThread().interrupt();
         }
     }
     
@@ -497,107 +241,65 @@ public class FederatedLearning {
     public Map<String, Object> getStatistics() {
         Map<String, Object> stats = new HashMap<>();
         stats.put("enabled", syncEnabled);
-        stats.put("repository_url", repositoryUrl);
-        stats.put("tactics_count", tacticAggregates.size());
-        stats.put("behaviors_count", behaviorAggregates.size());
+        stats.put("pending_submissions", pendingSubmissions.size());
         stats.put("contributed_data_points", totalDataPointsContributed);
-        stats.put("downloaded_data_points", totalDataPointsDownloaded);
-        stats.put("last_sync", new Date(lastSyncTime));
-        stats.put("last_pull", new Date(lastPullTime));
-        stats.put("consecutive_failures", consecutiveFailures);
+        stats.put("downloaded_updates", totalDataPointsDownloaded);
+        stats.put("last_sync_ms_ago", System.currentTimeMillis() - lastSyncTime);
+        stats.put("last_pull_ms_ago", System.currentTimeMillis() - lastPullTime);
+        
+        if (syncEnabled && apiClient != null) {
+            stats.put("api_status", apiClient.getStatusString());
+        }
+        
         return stats;
+    }
+    
+    /**
+     * Get status string for commands/debugging
+     */
+    public String getStatusString() {
+        if (!syncEnabled) {
+            return "Federated Learning: DISABLED";
+        }
+        
+        return String.format(
+            "Federated Learning: ACTIVE | Pending: %d tactics | Contributed: %d points | Downloaded: %d updates",
+            pendingSubmissions.size(),
+            totalDataPointsContributed,
+            totalDataPointsDownloaded
+        );
     }
     
     // ==================== Inner Classes ====================
     
     /**
-     * Federated Tactic - Privacy-safe aggregated tactic data
+     * Tactic submission aggregator - collects outcomes before API submission
      */
-    public static class FederatedTactic implements Serializable {
-        private static final long serialVersionUID = 1L;
-        
-        public final String tacticId;
-        public final String category;
-        public final Map<String, String> conditions;
-        
-        private int totalAttempts = 0;
-        private int successfulAttempts = 0;
-        private float successRate = 0.5f;
-        
-        public FederatedTactic(String tacticId, String category, Map<String, String> conditions) {
-            this.tacticId = tacticId;
-            this.category = category;
-            this.conditions = conditions;
-        }
-        
-        public void recordOutcome(boolean success) {
-            totalAttempts++;
-            if (success) successfulAttempts++;
-            successRate = (float) successfulAttempts / totalAttempts;
-        }
-        
-        public void mergeWith(FederatedTactic other) {
-            // Weighted average based on sample size
-            int combinedAttempts = this.totalAttempts + other.totalAttempts;
-            if (combinedAttempts > 0) {
-                float weight1 = (float) this.totalAttempts / combinedAttempts;
-                float weight2 = (float) other.totalAttempts / combinedAttempts;
-                this.successRate = (this.successRate * weight1) + (other.successRate * weight2);
-                this.totalAttempts = combinedAttempts;
-                this.successfulAttempts = (int) (this.successRate * combinedAttempts);
-            }
-        }
-        
-        public float getSuccessRate() {
-            return successRate;
-        }
-        
-        public int getTotalAttempts() {
-            return totalAttempts;
-        }
-    }
-    
-    /**
-     * Federated Behavior - Privacy-safe aggregated behavior data
-     */
-    public static class FederatedBehavior implements Serializable {
-        private static final long serialVersionUID = 1L;
-        
-        public final String behaviorId;
+    private static class TacticSubmission {
         public final String mobType;
+        public final String action;
         
-        private int totalAttempts = 0;
-        private int successfulAttempts = 0;
-        private float successRate = 0.5f;
+        private float totalReward = 0.0f;
+        private int successCount = 0;
+        private int totalCount = 0;
         
-        public FederatedBehavior(String behaviorId, String mobType) {
-            this.behaviorId = behaviorId;
+        public TacticSubmission(String mobType, String action) {
             this.mobType = mobType;
+            this.action = action;
         }
         
-        public void recordOutcome(boolean success) {
-            totalAttempts++;
-            if (success) successfulAttempts++;
-            successRate = (float) successfulAttempts / totalAttempts;
+        public void addOutcome(float reward, boolean success) {
+            totalReward += reward;
+            totalCount++;
+            if (success) successCount++;
         }
         
-        public void mergeWith(FederatedBehavior other) {
-            int combinedAttempts = this.totalAttempts + other.totalAttempts;
-            if (combinedAttempts > 0) {
-                float weight1 = (float) this.totalAttempts / combinedAttempts;
-                float weight2 = (float) other.totalAttempts / combinedAttempts;
-                this.successRate = (this.successRate * weight1) + (other.successRate * weight2);
-                this.totalAttempts = combinedAttempts;
-                this.successfulAttempts = (int) (this.successRate * combinedAttempts);
-            }
+        public float getAverageReward() {
+            return totalCount > 0 ? totalReward / totalCount : 0.0f;
         }
         
         public float getSuccessRate() {
-            return successRate;
-        }
-        
-        public int getTotalAttempts() {
-            return totalAttempts;
+            return totalCount > 0 ? (float) successCount / totalCount : 0.5f;
         }
     }
 }

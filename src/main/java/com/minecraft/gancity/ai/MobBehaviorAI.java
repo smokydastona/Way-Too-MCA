@@ -130,7 +130,12 @@ public class MobBehaviorAI {
      * Enable federated learning with Git repository or cloud API
      */
     public void enableFederatedLearning(String repoUrl, String cloudApiEndpoint, String cloudApiKey) {
-        if (repoUrl == null && cloudApiEndpoint == null) {
+        // Priority: Use Cloud API if available, fallback to Git
+        String effectiveEndpoint = (cloudApiEndpoint != null && !cloudApiEndpoint.isEmpty()) 
+            ? cloudApiEndpoint 
+            : repoUrl;
+        
+        if (effectiveEndpoint == null || effectiveEndpoint.isEmpty()) {
             LOGGER.info("Federated learning disabled - no repository or API configured");
             return;
         }
@@ -138,7 +143,7 @@ public class MobBehaviorAI {
         try {
             federatedLearning = new FederatedLearning(
                 modelPersistence != null ? modelPersistence.getModelPath().resolve("federated") : java.nio.file.Paths.get("federated"),
-                repoUrl != null ? repoUrl : ""
+                effectiveEndpoint
             );
             
             // Link to knowledge base
@@ -146,7 +151,11 @@ public class MobBehaviorAI {
                 tacticKnowledgeBase.setFederatedLearning(federatedLearning);
             }
             
-            LOGGER.info("Federated learning enabled - All servers will share AI knowledge");
+            if (cloudApiEndpoint != null && !cloudApiEndpoint.isEmpty()) {
+                LOGGER.info("Federated learning enabled - Using Cloudflare API: {}", cloudApiEndpoint);
+            } else {
+                LOGGER.info("Federated learning enabled - Using Git repository: {}", repoUrl);
+            }
         } catch (Exception e) {
             LOGGER.error("Failed to enable federated learning: {}", e.getMessage());
         }

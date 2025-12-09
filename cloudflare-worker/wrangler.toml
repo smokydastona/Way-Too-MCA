@@ -1,0 +1,20 @@
+name = "mca-ai-tactics-api"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# KV Namespace for storing tactics data
+[[kv_namespaces]]
+binding = "TACTICS_KV"
+id = "YOUR_KV_NAMESPACE_ID"  # Will be created during setup
+
+# Scheduled job to sync to GitHub (optional - runs every hour)
+[triggers]
+crons = ["0 * * * *"]  # Every hour at :00
+
+# Environment variables
+[vars]
+GITHUB_REPO = "smokydastona/Minecraft-machine-learned-collected"
+GITHUB_BRANCH = "main"
+
+# Secrets (set with: wrangler secret put GITHUB_TOKEN)
+# GITHUB_TOKEN = "your-github-personal-access-token"
