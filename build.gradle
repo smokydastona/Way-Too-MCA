@@ -82,18 +82,13 @@ dependencies {
         compileOnly fg.deobf(files(file))
     }
     
-    // Deep Java Library (DJL) for ML inference - bundled into JAR
-    implementation 'ai.djl:api:0.25.0'
-    implementation 'ai.djl:basicdataset:0.25.0'
-    implementation 'ai.djl.pytorch:pytorch-engine:0.25.0'
-    implementation 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
-    
-    // For NLP/dialogue generation
-    implementation 'ai.djl.huggingface:tokenizers:0.25.0'
-    
-    // Additional DJL dependencies
-    implementation 'com.google.code.gson:gson:2.10.1'
-    implementation 'org.apache.commons:commons-compress:1.26.0'
+    // Deep Java Library (DJL) for ML inference - OPTIONAL (compileOnly)
+    // If not present, mod uses rule-based AI instead
+    compileOnly 'ai.djl:api:0.25.0'
+    compileOnly 'ai.djl:basicdataset:0.25.0'
+    compileOnly 'ai.djl.pytorch:pytorch-engine:0.25.0'
+    compileOnly 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
+    compileOnly 'ai.djl.huggingface:tokenizers:0.25.0'
 }
 
 tasks.named('jar', Jar).configure {
@@ -108,15 +103,6 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
-    
-    // Include DJL libraries in JAR
-    from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-    } {
-        exclude "META-INF/*.RSA", "META-INF/*.SF", "META-INF/*.DSA"
-    }
-    
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     finalizedBy 'reobfJar'
 }
