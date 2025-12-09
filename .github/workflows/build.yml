@@ -51,13 +51,11 @@ jobs:
     - name: List build artifacts
       run: ls -la build/libs/
     
-    - name: Upload both JARs together
+    - name: Upload Adaptive-Mob-Ai JAR
       uses: actions/upload-artifact@v4
       with:
-        name: ai-overhaul-experiment-${{ steps.version.outputs.VERSION }}
-        path: |
-          build/libs/ai-overhaul-experiment-${{ steps.version.outputs.VERSION }}.jar
-          build/libs/ai-overhaul-experiment-${{ steps.version.outputs.VERSION }}-libs.jar
+        name: Adaptive-Mob-Ai-${{ steps.version.outputs.VERSION }}
+        path: build/libs/Adaptive-Mob-Ai-*.jar
         retention-days: 90
     
     - name: Create Release
