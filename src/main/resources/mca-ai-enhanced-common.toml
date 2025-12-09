@@ -59,8 +59,17 @@
 	enableFederatedLearning = true
 	
 	#Git repository URL for knowledge sharing
-	#Default: Official global knowledge repository
-	federatedRepoUrl = "https://github.com/smokydastona/Mob-Knowledge.git"
+	#SSH (recommended): git@github.com:smokydastona/Mob-Knowledge.git
+	#HTTPS (fallback): https://github.com/smokydastona/Mob-Knowledge.git
+	#
+	# SSH SETUP (recommended for write access):
+	# 1. Generate SSH key: ssh-keygen -t ed25519 -C "minecraft-server"
+	# 2. Copy public key: cat ~/.ssh/id_ed25519.pub
+	# 3. Add to GitHub: Settings → SSH and GPG keys → New SSH key
+	# 4. Test: ssh -T git@github.com
+	#
+	# Without SSH setup, mod will work in READ-ONLY mode (pull only)
+	federatedRepoUrl = "git@github.com:smokydastona/Mob-Knowledge.git"
 	
 	#Cloud API endpoint for faster sync (alternative to Git)
 	#Example: "https://your-server.com/api/knowledge"
@@ -73,8 +82,11 @@
 	#Range: 5 ~ 100
 	minDataPointsToContribute = 10
 	
-	#Enable automatic pull from federated repository
+	#Enable automatic pull from federated repository (always works)
 	autoDownloadKnowledge = true
+	
+	#Enable automatic push to federated repository (requires SSH/credentials)
+	autoUploadKnowledge = true
 	
 	#Sync interval in minutes
 	#Range: 5 ~ 60
