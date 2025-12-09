@@ -9,16 +9,7 @@ version = project.hasProperty('mod_version') ? project.mod_version : '1.0.0'
 group = 'com.minecraft.gancity'
 
 base {
-    archivesName = 'ai-overhaul-experiment'
-}
-
-// Configure jarJar to use custom name for -all.jar
-tasks.register('configureJarJar') {
-    doFirst {
-        tasks.named('jarJar').configure {
-            archiveBaseName = 'Adaptive-Mob-Ai'
-        }
-    }
+    archivesName = 'Adaptive-Mob-Ai'
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
