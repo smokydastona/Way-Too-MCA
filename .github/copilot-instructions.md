@@ -1,7 +1,32 @@
 # MCA AI Enhanced - Copilot Instructions
 
+## Workflow After Every Code Change
+
+**After ANY code change, you MUST follow this complete workflow:**
+
+1. **Scan all files first** - Run error checking across the entire codebase
+2. **Fix all errors systematically** - Address every error found, not just one file
+3. **Re-validate after each fix** - Ensure no new errors were introduced
+4. **Explain every change** - What was wrong, what you changed, and why
+5. **Push to GitHub Actions** - Commit and push ONLY (no tagging)
+6. **Only stop when 100% validated** - Continue until all files are completely correct and compile without errors
+
+## Compilation Workflow
+
+**NEVER build locally.** Always use GitHub Actions:
+
+```bash
+git add -A
+git commit -m "descriptive message"
+git push
+```
+
+**STOP HERE.** Do NOT run `git tag` - the user will create tags manually when ready.
+
+This triggers GitHub Actions to compile the mod. The workspace must stay clean - no `build/` or `.gradle/` directories.
+
 ## Project Overview
-This is a **hybrid project** containing both legacy Python ML code and a modern Forge 1.20.1 mod. The active focus is the **Java Forge mod** that uses AI/ML to enhance Minecraft mob behavior and MCA Reborn villager dialogue.
+This is a **Forge 1.20.1 mod** that uses **real machine learning** (Deep Q-Network) to enhance Minecraft mob AI. The mod works standalone - MCA Reborn integration is optional and detected at runtime.
 
 **Dual Codebase Structure:**
 - **Legacy (inactive)**: Python GAN training scripts (`*.py` files, `data/`) - original city generation concept

@@ -66,20 +66,15 @@ repositories {
     maven {
         url "https://maven.neoforged.net/releases/"
     }
-    maven {
-        url "https://maven.lukeonuke.com/repository/mca"
-    }
-    maven {
-        url "https://cursemaven.com"
-    }
+    mavenCentral()
 }
 
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
     
-    // MCA Reborn dependency
-    compileOnly fg.deobf("curse.maven:mca-reborn-263420:5093982")
-    runtimeOnly fg.deobf("curse.maven:mca-reborn-263420:5093982")
+    // MCA Reborn is optional - mod works without it
+    // Users need to manually download MCA Reborn from CurseForge if they want villager dialogue features
+    // compileOnly fg.deobf("curse.maven:mca-reborn-263420:5093982")
     
     // Deep Java Library (DJL) for ML inference
     implementation 'ai.djl:api:0.25.0'
