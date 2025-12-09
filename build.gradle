@@ -104,7 +104,8 @@ dependencies {
     mlLibs 'ai.djl.pytorch:pytorch-engine:0.25.0'
     mlLibs 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
     mlLibs 'ai.djl.huggingface:tokenizers:0.25.0'
-    mlLibs 'ml.dmlc:xgboost4j:2.0.3'
+    // XGBoost - commented out until we can find correct Maven coordinates
+    // mlLibs 'ml.dmlc:xgboost4j:2.0.3'
 }
 
 tasks.named('jar', Jar).configure {
