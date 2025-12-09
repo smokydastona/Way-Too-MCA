@@ -55,34 +55,32 @@
 	experimentalFeatures = false
 
 [federated_learning]
-	#Enable federated learning (share knowledge across all servers)
+	#Enable federated learning (share AI knowledge across ALL servers globally)
+	#Works out-of-the-box - no setup required!
 	enableFederatedLearning = true
 	
-	#Cloudflare Worker API endpoint (zero-config, works out-of-the-box)
+	#Cloudflare Worker API endpoint (PLUG AND PLAY - already configured!)
+	#Your mobs will automatically learn from thousands of players worldwide
 	cloudApiEndpoint = "https://mca-ai-tactics-api.mc-ai-datcol.workers.dev"
 	
-	#LEGACY: Git repository URL (deprecated, use cloudApiEndpoint instead)
-	#SSH: git@github.com:smokydastona/Minecraft-machine-learned-collected.git
-	#Only used if cloudApiEndpoint is empty
-	federatedRepoUrl = "git@github.com:smokydastona/Minecraft-machine-learned-collected.git"
-	
-	#Cloud API endpoint for faster sync (alternative to Git)
-	#Example: "https://your-server.com/api/knowledge"
-	cloudApiEndpoint = ""
-	
-	#Cloud API key for authentication (optional)
+	#Cloud API key for authentication (leave empty - public endpoint)
 	cloudApiKey = ""
 	
-	#Minimum data points before contributing to federated knowledge
+	#Minimum data points before contributing to global knowledge
 	#Range: 5 ~ 100
 	minDataPointsToContribute = 10
 	
-	#Enable automatic pull from federated repository (always works)
+	#Auto-download tactics learned by other servers (recommended: true)
 	autoDownloadKnowledge = true
 	
-	#Enable automatic push to federated repository (requires SSH/credentials)
+	#Auto-upload your tactics to help other servers (recommended: true)
 	autoUploadKnowledge = true
 	
-	#Sync interval in minutes
+	#How often to sync with global knowledge base (minutes)
 	#Range: 5 ~ 60
 	syncIntervalMinutes = 5
+	
+	#LEGACY OPTIONS (deprecated - ignore these)
+	#Git repository URL - only used if cloudApiEndpoint is removed
+	federatedRepoUrl = "git@github.com:smokydastona/Minecraft-machine-learned-collected.git"
+
