@@ -210,7 +210,14 @@ public class TacticKnowledgeBase {
         
         // Sync to federated learning if enabled
         if (federatedLearning != null && category != null) {
-            federatedLearning.recordLocalOutcome(key, category, success, conditions);
+            // Extract action from key (format: "mobType:action" or just "action")
+            String action = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
+            String mobType = category; // Use category as mob type
+            
+            // Calculate reward based on success
+            float reward = success ? 1.0f : -1.0f;
+            
+            federatedLearning.recordCombatOutcome(mobType, action, reward, success);
         }
         
         LOGGER.debug("Tactic '{}' outcome: {} (new rate: {:.2f})", 
