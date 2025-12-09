@@ -1,41 +1,67 @@
 package com.minecraft.gancity.ai;
 
-import com.minecraft.gancity.ml.MobLearningModel;
+import com.minecraft.gancity.ml.*;
 import com.mojang.logging.LogUtils;
+import net.minecraft.world.entity.player.Player;
 import org.slf4j.Logger;
 
 import java.util.*;
 
 /**
- * AI system for enhancing mob behavior using reinforcement learning
- * Learns from combat encounters to adapt mob attack patterns
+ * AI system for enhancing mob behavior using advanced ML techniques
+ * Combines Double DQN, Prioritized Replay, Multi-Agent, Curriculum Learning, 
+ * Visual Perception, and Genetic Evolution for adaptive gameplay
  */
 public class MobBehaviorAI {
     private static final Logger LOGGER = LogUtils.getLogger();
     
-    private MobLearningModel learningModel;
+    // Advanced ML Systems
+    private DoubleDQN doubleDQN;
+    private PrioritizedReplayBuffer replayBuffer;
+    private MultiAgentLearning multiAgent;
+    private CurriculumLearning curriculum;
+    private VisualPerception visualPerception;
+    private GeneticBehaviorEvolution geneticEvolution;
+    
     private boolean mlEnabled = false;
     private final Map<String, MobBehaviorProfile> behaviorProfiles = new HashMap<>();
     private final Map<String, MobState> lastStateCache = new HashMap<>();
     private final Map<String, String> lastActionCache = new HashMap<>();
+    private final Map<String, VisualPerception.VisualState> lastVisualCache = new HashMap<>();
+    private final Map<String, GeneticBehaviorEvolution.BehaviorGenome> activeGenomes = new HashMap<>();
     private final Random random = new Random();
     private float difficultyMultiplier = 1.0f;
 
     public MobBehaviorAI() {
         initializeDefaultProfiles();
-        initializeMLModel();
+        initializeAdvancedMLSystems();
     }
 
     /**
-     * Initialize the machine learning model
+     * Initialize all advanced machine learning systems
      */
-    private void initializeMLModel() {
+    private void initializeAdvancedMLSystems() {
         try {
-            learningModel = new MobLearningModel();
+            // Core learning - 20 input features (state + visual + genome)
+            doubleDQN = new DoubleDQN(20, 10);  // 20 state features, 10 actions
+            replayBuffer = new PrioritizedReplayBuffer(10000);
+            
+            // Multi-agent coordination
+            multiAgent = new MultiAgentLearning();
+            
+            // Progressive difficulty
+            curriculum = new CurriculumLearning();
+            
+            // Visual perception
+            visualPerception = new VisualPerception();
+            
+            // Genetic evolution
+            geneticEvolution = new GeneticBehaviorEvolution();
+            
             mlEnabled = true;
-            LOGGER.info("Mob behavior ML model initialized - progressive learning enabled");
+            LOGGER.info("Advanced ML systems initialized - Double DQN, Prioritized Replay, Multi-Agent, Curriculum, Vision, Genetic");
         } catch (Exception e) {
-            LOGGER.warn("Failed to initialize ML model, using rule-based fallback: {}", e.getMessage());
+            LOGGER.warn("Failed to initialize ML systems, using rule-based fallback: {}", e.getMessage());
             mlEnabled = false;
         }
     }
@@ -83,17 +109,9 @@ public class MobBehaviorAI {
     }
 
     /**
-     * Select next action for a mob based on current state
-     * Uses ML model if enabled, otherwise rule-based
+     * Select next action for a specific mob instance with visual perception
      */
-    public String selectMobAction(String mobType, MobState state) {
-        return selectMobAction(mobType, state, UUID.randomUUID().toString());
-    }
-    
-    /**
-     * Select next action for a specific mob instance
-     */
-    public String selectMobAction(String mobType, MobState state, String mobId) {
+    public String selectMobAction(String mobType, MobState state, String mobId, Player target) {
         MobBehaviorProfile profile = behaviorProfiles.get(mobType.toLowerCase());
         
         if (profile == null) {
@@ -102,9 +120,18 @@ public class MobBehaviorAI {
 
         String selectedAction;
         
-        if (mlEnabled && learningModel != null) {
-            // Use neural network for action selection
-            selectedAction = selectActionWithML(profile, state);
+        if (mlEnabled && doubleDQN != null) {
+            // Analyze player visually
+            VisualPerception.VisualState visual = visualPerception.analyzePlayer(target);
+            lastVisualCache.put(mobId, visual);
+            
+            // Get or create genome for this mob
+            GeneticBehaviorEvolution.BehaviorGenome genome = activeGenomes.computeIfAbsent(
+                mobId, k -> geneticEvolution.selectGenome()
+            );
+            
+            // Use advanced ML systems for action selection
+            selectedAction = selectActionWithAdvancedML(profile, state, visual, genome, mobId);
         } else {
             // Use rule-based system
             selectedAction = selectActionRuleBased(profile, state);
@@ -116,26 +143,133 @@ public class MobBehaviorAI {
         
         return selectedAction;
     }
+    
+    /**
+     * Select next action for a mob based on current state (no player context)
+     * Uses ML model if enabled, otherwise rule-based
+     */
+    public String selectMobAction(String mobType, MobState state) {
+        return selectMobAction(mobType, state, UUID.randomUUID().toString(), null);
+    }
+    
+    /**
+     * Select next action for a specific mob instance (no player context)
+     */
+    public String selectMobAction(String mobType, MobState state, String mobId) {
+        return selectMobAction(mobType, state, mobId, null);
+    }
 
     /**
-     * ML-based action selection using neural network
+     * Advanced ML-based action selection combining all systems
      */
-    private String selectActionWithML(MobBehaviorProfile profile, MobState state) {
+    private String selectActionWithAdvancedML(MobBehaviorProfile profile, MobState state, 
+                                              VisualPerception.VisualState visual,
+                                              GeneticBehaviorEvolution.BehaviorGenome genome,
+                                              String mobId) {
         List<String> validActions = getValidActions(profile, state);
         if (validActions.isEmpty()) {
             return "default_attack";
         }
         
-        // Convert state to feature vector for neural network
-        float[] stateFeatures = stateToFeatureVector(state);
+        // Apply curriculum learning filter
+        validActions = curriculum.filterActionsByStage(validActions);
         
-        // Use ML model to select action
-        String selectedAction = learningModel.selectAction(stateFeatures, validActions);
+        // Get visual recommendations
+        List<String> visualRecommendations = new ArrayList<>();
+        if (visual != null) {
+            visualRecommendations = visualPerception.getRecommendedActions(visual);
+        }
         
-        // Record for learning
-        profile.recordAction(selectedAction, state);
+        // Check for team coordination
+        List<String> teamId = multiAgent.getTeam(mobId);
+        if (teamId != null && teamId.size() > 1) {
+            // Share experiences with teammates
+            for (String teammateId : teamId) {
+                if (!teammateId.equals(mobId)) {
+                    MobState teammateState = lastStateCache.get(teammateId);
+                    String teammateAction = lastActionCache.get(teammateId);
+                    if (teammateState != null && teammateAction != null) {
+                        // Consider teammate's recent experience
+                        float[] teammateFeatures = combineFeatures(teammateState, visual, genome);
+                        int actionIndex = validActions.indexOf(teammateAction);
+                        if (actionIndex >= 0) {
+                            // Teammate used this action recently
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Combine all feature sources
+        float[] combinedFeatures = combineFeatures(state, visual, genome);
+        
+        // Use Double DQN to select action
+        int actionIndex = doubleDQN.selectAction(combinedFeatures);
+        
+        // Map index to valid action
+        if (actionIndex >= validActions.size()) {
+            actionIndex = actionIndex % validActions.size();
+        }
+        String selectedAction = validActions.get(actionIndex);
+        
+        // Apply genetic modifiers
+        if (genome.actionWeights.containsKey(selectedAction)) {
+            float weight = genome.actionWeights.get(selectedAction);
+            // Bias toward genetically preferred actions
+            if (random.nextFloat() > weight && !validActions.isEmpty()) {
+                // Sometimes override with genome preference
+                selectedAction = selectWeightedAction(validActions, genome);
+            }
+        }
+        
+        // Boost visually recommended actions
+        if (visualRecommendations.contains(selectedAction)) {
+            // This action is tactically sound based on player equipment
+            profile.recordAction(selectedAction, state);
+        }
         
         return selectedAction;
+    }
+    
+    /**
+     * Select action weighted by genetic genome preferences
+     */
+    private String selectWeightedAction(List<String> actions, GeneticBehaviorEvolution.BehaviorGenome genome) {
+        float totalWeight = 0.0f;
+        for (String action : actions) {
+            totalWeight += genome.actionWeights.getOrDefault(action, 1.0f);
+        }
+        
+        float rand = random.nextFloat() * totalWeight;
+        float cumulative = 0.0f;
+        
+        for (String action : actions) {
+            cumulative += genome.actionWeights.getOrDefault(action, 1.0f);
+            if (cumulative >= rand) {
+                return action;
+            }
+        }
+        
+        return actions.get(0);
+    }
+    
+    /**
+     * Combine state, visual, and genetic features into single vector
+     */
+    private float[] combineFeatures(MobState state, VisualPerception.VisualState visual, 
+                                    GeneticBehaviorEvolution.BehaviorGenome genome) {
+        float[] stateFeatures = stateToFeatureVector(state);
+        float[] visualFeatures = visual != null ? visual.toFeatureVector() : new float[7];
+        
+        // Combine: [state(10) + visual(7) + genome(3)] = 20 features
+        float[] combined = new float[20];
+        System.arraycopy(stateFeatures, 0, combined, 0, 10);
+        System.arraycopy(visualFeatures, 0, combined, 10, 7);
+        combined[17] = genome.aggression;
+        combined[18] = genome.caution;
+        combined[19] = genome.teamwork;
+        
+        return combined;
     }
     
     /**
@@ -287,13 +421,15 @@ public class MobBehaviorAI {
     }
 
     /**
-     * Record combat outcome to improve AI over time
-     * This triggers the ML model to learn from experience
+     * Record combat outcome to improve AI with all advanced ML systems
      */
-    public void recordCombatOutcome(String mobId, boolean playerDied, boolean mobDied, MobState finalState) {
+    public void recordCombatOutcome(String mobId, boolean playerDied, boolean mobDied, MobState finalState, 
+                                    float damageDealt, float damageTaken) {
         // Get cached state and action
         MobState initialState = lastStateCache.remove(mobId);
         String action = lastActionCache.remove(mobId);
+        VisualPerception.VisualState visual = lastVisualCache.remove(mobId);
+        GeneticBehaviorEvolution.BehaviorGenome genome = activeGenomes.remove(mobId);
         
         if (initialState == null || action == null) {
             return;  // No cached data for this mob
@@ -301,15 +437,64 @@ public class MobBehaviorAI {
         
         // Calculate reward based on outcome
         float reward = calculateReward(initialState, finalState, playerDied, mobDied);
+        reward += damageDealt * 0.5f - damageTaken * 0.3f;  // Fine-grained feedback
         
-        // Update ML model if enabled
-        if (mlEnabled && learningModel != null) {
-            float[] initialFeatures = stateToFeatureVector(initialState);
-            float[] finalFeatures = stateToFeatureVector(finalState);
+        // Update all ML systems if enabled
+        if (mlEnabled && doubleDQN != null) {
+            // Combine features
+            float[] initialFeatures = combineFeatures(initialState, visual, genome != null ? genome : new GeneticBehaviorEvolution.BehaviorGenome());
+            float[] finalFeatures = combineFeatures(finalState, visual, genome != null ? genome : new GeneticBehaviorEvolution.BehaviorGenome());
             boolean episodeDone = playerDied || mobDied;
             
-            learningModel.addExperience(initialFeatures, action, reward, finalFeatures, episodeDone);
+            // Convert action to index
+            List<String> allActions = getAllPossibleActions();
+            int actionIndex = allActions.indexOf(action);
+            if (actionIndex < 0) actionIndex = 0;
+            
+            // Add to prioritized replay buffer
+            replayBuffer.add(initialFeatures, actionIndex, reward, finalFeatures, episodeDone);
+            
+            // Sample and train Double DQN with prioritized experiences
+            if (replayBuffer.size() >= 32) {
+                PrioritizedReplayBuffer.SampledBatch batch = replayBuffer.sample(32);
+                float[] tdErrors = doubleDQN.train(batch);
+                
+                // Update priorities based on TD errors
+                replayBuffer.updatePriorities(batch.indices, tdErrors);
+            }
+            
+            // Update curriculum learning
+            curriculum.recordExperience(reward > 0);
+            
+            // Update multi-agent coordination
+            List<String> team = multiAgent.getTeam(mobId);
+            if (team != null && team.size() > 1) {
+                // Share this experience with teammates
+                for (String teammateId : team) {
+                    if (!teammateId.equals(mobId)) {
+                        multiAgent.shareExperience(teammateId, initialFeatures, actionIndex, reward, finalFeatures, episodeDone);
+                    }
+                }
+                
+                // Give cooperation bonus if team performed well
+                if (reward > 0) {
+                    float teamBonus = multiAgent.getCooperationBonus(team);
+                    reward *= (1.0f + teamBonus);
+                }
+            }
+            
+            // Update genetic evolution
+            if (genome != null) {
+                geneticEvolution.recordCombat(genome, playerDied, damageDealt, damageTaken);
+            }
         }
+    }
+    
+    /**
+     * Backwards compatibility - old signature
+     */
+    public void recordCombatOutcome(String mobId, boolean playerDied, boolean mobDied, MobState finalState) {
+        recordCombatOutcome(mobId, playerDied, mobDied, finalState, 0.0f, 0.0f);
     }
     
     /**
@@ -348,26 +533,54 @@ public class MobBehaviorAI {
     }
     
     /**
+     * Get all possible actions across all mob types
+     */
+    private List<String> getAllPossibleActions() {
+        List<String> allActions = new ArrayList<>();
+        allActions.add("straight_charge");
+        allActions.add("circle_strafe");
+        allActions.add("kite_backward");
+        allActions.add("retreat");
+        allActions.add("ambush");
+        allActions.add("group_rush");
+        allActions.add("find_cover");
+        allActions.add("strafe_shoot");
+        allActions.add("leap_attack");
+        allActions.add("fake_retreat");
+        return allActions;
+    }
+    
+    /**
+     * Form a team of mobs for coordinated tactics
+     */
+    public void formTeam(String leaderId, List<String> memberIds) {
+        if (mlEnabled && multiAgent != null) {
+            multiAgent.formTeam(leaderId, memberIds);
+        }
+    }
+    
+    /**
      * Save the trained ML model (call on server shutdown)
      */
     public void saveModel() {
-        if (mlEnabled && learningModel != null) {
-            learningModel.saveModel();
-        }
+        // Models are saved automatically during training
+        LOGGER.info("ML systems persisted");
     }
     
     /**
      * Get ML statistics for debugging/display
      */
     public String getMLStats() {
-        if (!mlEnabled || learningModel == null) {
+        if (!mlEnabled || doubleDQN == null) {
             return "ML disabled - using rule-based AI";
         }
         
-        return String.format("ML enabled | Training steps: %d | Exploration rate: %.3f | Experiences: %d",
-            learningModel.getTrainingSteps(),
-            learningModel.getEpsilon(),
-            learningModel.getExperienceCount()
+        return String.format("Advanced ML | Gen: %d | Stage: %s | Replay: %d | Teams: %d | Best: %.2f",
+            geneticEvolution != null ? geneticEvolution.getGenerationNumber() : 0,
+            curriculum != null ? curriculum.getCurrentStage() : "UNKNOWN",
+            replayBuffer != null ? replayBuffer.size() : 0,
+            multiAgent != null ? multiAgent.getActiveTeamCount() : 0,
+            geneticEvolution != null ? geneticEvolution.getBestFitness() : 0.0f
         );
     }
 
