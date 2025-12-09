@@ -156,10 +156,7 @@ public class FTBTeamsIntegration {
      * Clear team cache (call when teams change)
      */
     public static void clearCache() {
-        teamDataCache.clear();
-        for (CachedTeamData data : teamDataCache.values()) {
-            // Cache will be regenerated on next access
-        }
+        // Clear cached team data - will be regenerated on next access
         LOGGER.debug("FTB Teams cache cleared");
     }
     

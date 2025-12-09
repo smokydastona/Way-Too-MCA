@@ -191,7 +191,7 @@ public class DoubleDQN {
                 }
                 
                 // TD error for prioritization
-                float currentQValue = currentQ.getFloat(exp.actionIndex);
+                float currentQValue = currentQ.getFloat(exp.action);
                 tdErrors[i] = Math.abs(target - currentQValue);
             }
         }

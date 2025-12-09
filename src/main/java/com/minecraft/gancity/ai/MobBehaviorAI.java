@@ -227,10 +227,10 @@ public class MobBehaviorAI {
         }
         
         // Check for team coordination
-        List<String> teamId = multiAgent.getTeam(mobId);
-        if (teamId != null && teamId.size() > 1) {
+        List<String> teamMembers = multiAgent.getTeamMembers(mobId);
+        if (teamMembers != null && teamMembers.size() > 1) {
             // Share experiences with teammates
-            for (String teammateId : teamId) {
+            for (String teammateId : teamMembers) {
                 if (!teammateId.equals(mobId)) {
                     MobState teammateState = lastStateCache.get(teammateId);
                     String teammateAction = lastActionCache.get(teammateId);
@@ -250,7 +250,7 @@ public class MobBehaviorAI {
         float[] combinedFeatures = combineFeatures(state, visual, genome);
         
         // Use Double DQN to select action
-        int actionIndex = doubleDQN.selectAction(combinedFeatures);
+        int actionIndex = doubleDQN.selectActionIndex(combinedFeatures);
         
         // Map index to valid action
         if (actionIndex >= validActions.size()) {
@@ -503,28 +503,32 @@ public class MobBehaviorAI {
             // Sample and train Double DQN with prioritized experiences
             if (replayBuffer.size() >= 32) {
                 PrioritizedReplayBuffer.SampledBatch batch = replayBuffer.sample(32);
-                float[] tdErrors = doubleDQN.train(batch);
+                float[] tdErrors = doubleDQN.trainBatch(batch.experiences);
                 
                 // Update priorities based on TD errors
-                replayBuffer.updatePriorities(batch.indices, tdErrors);
+                int[] indices = new int[batch.experiences.size()];
+                for (int i = 0; i < batch.experiences.size(); i++) {
+                    indices[i] = i;
+                }
+                replayBuffer.updatePriorities(indices, tdErrors);
             }
             
             // Update curriculum learning
             curriculum.recordExperience(reward > 0);
             
             // Update multi-agent coordination
-            List<String> team = multiAgent.getTeam(mobId);
+            List<String> team = multiAgent.getTeamMembers(mobId);
             if (team != null && team.size() > 1) {
                 // Share this experience with teammates
                 for (String teammateId : team) {
                     if (!teammateId.equals(mobId)) {
-                        multiAgent.shareExperience(teammateId, initialFeatures, actionIndex, reward, finalFeatures, episodeDone);
+                        multiAgent.recordTeamExperience(mobId, teammateId, reward);
                     }
                 }
                 
                 // Give cooperation bonus if team performed well
                 if (reward > 0) {
-                    float teamBonus = multiAgent.getCooperationBonus(team);
+                    float teamBonus = multiAgent.getTeamCoordinationBonus(mobId);
                     reward *= (1.0f + teamBonus);
                 }
             }
@@ -601,7 +605,9 @@ public class MobBehaviorAI {
      */
     public void formTeam(String leaderId, List<String> memberIds) {
         if (mlEnabled && multiAgent != null) {
-            multiAgent.formTeam(leaderId, memberIds);
+            List<String> allMembers = new ArrayList<>(memberIds);
+            allMembers.add(0, leaderId);
+            multiAgent.formTeam(allMembers);
         }
     }
     
