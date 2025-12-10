@@ -97,22 +97,50 @@ public class MobTierAssignmentHandler {
     private static void applyTierModifiers(Mob mob, TacticTier tier) {
         float multiplier = tier.getDifficultyMultiplier();
         
+        // Get base stats for logging
+        float originalMaxHealth = mob.getMaxHealth();
+        float originalSpeed = (float) mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED).getBaseValue();
+        
         // Elite mobs are tougher
         if (tier == TacticTier.ELITE) {
-            // 20% more health
-            mob.setHealth(mob.getMaxHealth() * 1.2f);
+            // 20% more max health (must set attribute, not just current health)
+            float newMaxHealth = originalMaxHealth * 1.2f;
+            mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH)
+                .setBaseValue(newMaxHealth);
+            mob.setHealth(newMaxHealth);
+            
+            // 10% faster movement
+            float newSpeed = originalSpeed * 1.1f;
+            mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
+                .setBaseValue(newSpeed);
             
             // Subtle visual indicator - persistent glowing effect
             mob.setGlowingTag(false); // Don't make them glow (too obvious)
         }
         // Rookie mobs are weaker
         else if (tier == TacticTier.ROOKIE) {
-            // 20% less health
-            mob.setHealth(mob.getMaxHealth() * 0.8f);
+            // 20% less max health
+            float newMaxHealth = originalMaxHealth * 0.8f;
+            mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH)
+                .setBaseValue(newMaxHealth);
+            mob.setHealth(newMaxHealth);
+            
+            // 10% slower movement
+            float newSpeed = originalSpeed * 0.9f;
+            mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
+                .setBaseValue(newSpeed);
         }
+        // Veteran mobs keep default stats
         
-        // Movement speed adjustment (subtle)
-        mob.setSpeed(mob.getSpeed() * (0.9f + (multiplier * 0.1f)));
+        // Log speed modifier (if changed)
+        float finalSpeed = (float) mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED).getBaseValue();
+        if (Math.abs(finalSpeed - originalSpeed) > 0.001f) {
+            LOGGER.info("[Tier System] Speed modifier applied: {} -> {} ({}{:.1f}%)",
+                    String.format("%.3f", originalSpeed),
+                    String.format("%.3f", finalSpeed),
+                    finalSpeed > originalSpeed ? "+" : "",
+                    ((finalSpeed / originalSpeed - 1.0f) * 100.0f));
+        }
     }
     
     /**
