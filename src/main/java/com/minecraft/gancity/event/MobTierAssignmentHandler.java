@@ -47,27 +47,38 @@ public class MobTierAssignmentHandler {
         }
         
         Mob mob = (Mob) entity;
-        CompoundTag data = mob.getPersistentData();
+        
+        // Use entity's own NBT data (visible in F3) instead of PersistentData
+        CompoundTag entityData = new CompoundTag();
+        mob.saveWithoutId(entityData);
         
         // Check if tier already assigned (prevent reassignment on world reload)
-        if (data.getBoolean(TIER_ASSIGNED_TAG)) {
+        if (entityData.contains(TIER_TAG)) {
             return;
         }
         
         // Assign random tier based on weights
         TacticTier tier = TacticTier.selectRandomTier(RANDOM);
         
-        // Store tier in NBT
-        data.putString(TIER_TAG, tier.getName());
-        data.putBoolean(TIER_ASSIGNED_TAG, true);
+        // Store tier in entity NBT (visible in F3 screen)
+        entityData.putString(TIER_TAG, tier.getName());
+        entityData.putBoolean(TIER_ASSIGNED_TAG, true);
+        mob.load(entityData);
+        
+        // Also store in PersistentData for code access
+        CompoundTag persistentData = mob.getPersistentData();
+        persistentData.putString(TIER_TAG, tier.getName());
+        persistentData.putBoolean(TIER_ASSIGNED_TAG, true);
         
         // Apply difficulty multiplier to mob stats
         applyTierModifiers(mob, tier);
         
-        LOGGER.debug("Assigned {} tier to {} (ID: {})", 
+        LOGGER.info("[Tier System] Assigned {} tier to {} (UUID: {}) - Health: {}/{}", 
             tier.getName().toUpperCase(), 
             mob.getType().getDescription().getString(),
-            mob.getUUID());
+            mob.getUUID(),
+            mob.getHealth(),
+            mob.getMaxHealth());
     }
     
     /**
