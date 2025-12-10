@@ -878,8 +878,13 @@ async function syncToGitHub(env, mobType, tacticsData, batchReport) {
     }
     
     // Create or update file
-    const batchInfo = batchReport ? ` [Batch: ${batchReport.validation.quality} quality, ${batchReport.comparison.trend} trend]` : '';
-    const commitMessage = `Federated learning: Update ${mobType} tactics (${tacticsData.submissions} submissions)${batchInfo}`;
+    let commitMessage = `Federated learning: Update ${mobType} tactics (${tacticsData.submissions} submissions)`;
+    
+    if (batchReport && batchReport.validation && batchReport.comparison) {
+      const quality = batchReport.validation.quality || 'unknown';
+      const trend = batchReport.comparison.trend || 'stable';
+      commitMessage += ` [Batch: ${quality} quality, ${trend} trend]`;
+    }
     
     const updatePayload = {
       message: commitMessage,
