@@ -117,8 +117,7 @@ public class MobTierAssignmentHandler {
             mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
                 .setBaseValue(newSpeed);
             
-            // Visual indicator - subtle red glow
-            mob.setGlowingTag(true);
+            // Visual indicator handled by particle effects (no glow)
         }
         // Rookie mobs are weaker
         else if (tier == TacticTier.ROOKIE) {
