@@ -52,6 +52,8 @@ public class CloudflareAPIClient {
     // Performance optimizations
     private final TacticsCache cache = new TacticsCache(); // 5min TTL cache
     private final DirtyFlagTracker dirtyTracker = new DirtyFlagTracker();
+    private final DownloadThrottler downloadThrottler = new DownloadThrottler(3, 60000); // 3 requests per minute
+    private final String serverId = generateServerId(); // Unique server identifier
     
     // Statistics
     private long totalSubmissions = 0;
@@ -103,7 +105,7 @@ public class CloudflareAPIClient {
             // Calculate tier based on win rate
             TacticTier tier = TacticTier.fromWinRate(winRate);
             
-            // Build JSON payload
+            // Build JSON payload with merge metadata
             JsonObject payload = new JsonObject();
             payload.addProperty("mobType", mobType);
             payload.addProperty("action", action);
@@ -112,6 +114,9 @@ public class CloudflareAPIClient {
             payload.addProperty("winRate", winRate);
             payload.addProperty("tier", tier.getName());
             payload.addProperty("timestamp", System.currentTimeMillis());
+            payload.addProperty("serverId", serverId); // Unique server ID for conflict detection
+            payload.addProperty("sampleCount", 1); // Number of samples (for weighted averaging)
+            payload.addProperty("mergeStrategy", "weighted_average"); // How to handle conflicts
             
             String jsonPayload = gson.toJson(payload);
             
@@ -167,11 +172,19 @@ public class CloudflareAPIClient {
         Map<String, Object> cached = cache.get("global_tactics");
         if (cached != null) {
             cacheHits++;
-            LOGGER.info("Using cached tactics data (cache hit #{}})", cacheHits);
+            LOGGER.info("Using cached tactics data (cache hit #{})", cacheHits);
             return cached;
         }
         
         cacheMisses++;
+        
+        // Throttle download requests to prevent rate limit exhaustion
+        // Add random jitter (0-5 seconds) to prevent simultaneous requests
+        if (!downloadThrottler.tryAcquire()) {
+            LOGGER.warn("Download throttled - too many recent requests. Using fallback.");
+            return new Object2ObjectOpenHashMap<>();
+        }
+        
         LOGGER.debug("Cache miss, downloading from GitHub (miss #{})", cacheMisses);
         
         try {
@@ -531,12 +544,70 @@ public class CloudflareAPIClient {
             : 0;
         
         return String.format(
-            "API Client Stats - Submissions: %d (%.1f%% success), Downloads: %d, Last sync: %ds ago",
+            "API Client Stats - Submissions: %d (%.1f%% success), Downloads: %d, Last sync: %ds ago, Server ID: %s",
             totalSubmissions,
             successRate,
             totalDownloads,
-            (System.currentTimeMillis() - lastSuccessfulSync) / 1000
+            (System.currentTimeMillis() - lastSuccessfulSync) / 1000,
+            serverId.substring(0, 8) // Show first 8 chars of server ID
         );
+    }
+    
+    /**
+     * Generate unique server ID for conflict resolution
+     */
+    private String generateServerId() {
+        // Use combination of timestamp, random value, and system properties
+        String seed = System.currentTimeMillis() + "-" + 
+                      ThreadLocalRandom.current().nextLong() + "-" +
+                      System.getProperty("user.name", "unknown");
+        return Integer.toHexString(seed.hashCode());
+    }
+    
+    /**
+     * Get server ID (for logging/debugging)
+     */
+    private String getServerId() {
+        return serverId;
+    }
+    
+    /**
+     * Download request throttler to prevent rate limit exhaustion
+     * Uses token bucket algorithm with random jitter
+     */
+    static class DownloadThrottler {
+        private final int maxRequests;
+        private final long windowMs;
+        private final ConcurrentLinkedQueue<Long> requestTimes = new ConcurrentLinkedQueue<>();
+        private final ThreadLocalRandom random = ThreadLocalRandom.current();
+        
+        public DownloadThrottler(int maxRequests, long windowMs) {
+            this.maxRequests = maxRequests;
+            this.windowMs = windowMs;
+        }
+        
+        public boolean tryAcquire() {
+            long now = System.currentTimeMillis();
+            
+            // Add random jitter (0-5 seconds) to prevent thundering herd
+            try {
+                Thread.sleep(random.nextInt(5000));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+            
+            // Remove old requests outside the window
+            requestTimes.removeIf(time -> now - time > windowMs);
+            
+            // Check if we can make a new request
+            if (requestTimes.size() < maxRequests) {
+                requestTimes.add(now);
+                return true;
+            }
+            
+            return false;
+        }
     }
     
     /**
