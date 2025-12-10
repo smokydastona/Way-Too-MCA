@@ -125,11 +125,6 @@ tasks.named('jarJar').configure {
     }
 }
 
-// Make reobfJar use jarJar output
-tasks.named('reobfJar').configure {
-    dependsOn 'jarJar'
-}
-
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
