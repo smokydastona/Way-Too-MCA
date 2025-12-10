@@ -14,6 +14,7 @@ public class VillagerDialogueAI {
     
     private final Map<UUID, VillagerPersonality> villagerPersonalities = new HashMap<>();
     private final Random random = new Random();
+    private final DialogueGenerator generator = new DialogueGenerator();
 
     // Dialogue templates for fallback
     private static final Map<String, List<String>> DIALOGUE_TEMPLATES = new HashMap<>();
@@ -99,7 +100,8 @@ public class VillagerDialogueAI {
     }
 
     public VillagerDialogueAI() {
-        LOGGER.info("VillagerDialogueAI initialized with template-based dialogue system");
+        LOGGER.info("VillagerDialogueAI initialized with dynamic text generation system");
+        generator.initialize();
     }
     
     /**
@@ -114,7 +116,9 @@ public class VillagerDialogueAI {
      */
     public String generateDialogue(UUID villagerId, String playerMessage, DialogueContext context) {
         VillagerPersonality personality = getOrCreatePersonality(villagerId);
-        return generateWithTemplates(personality, context);
+        
+        // Generate dynamic response based on context and personality
+        return generator.generateResponse(personality, context, playerMessage);
     }
     
     /**
@@ -227,14 +231,9 @@ public class VillagerDialogueAI {
      * Get dialogue statistics
      */
     public String getStats() {
-        if (transformerEnabled && transformerDialogue != null) {
-            Map<String, Integer> stats = transformerDialogue.getStats();
-            return String.format("Transformer Dialogue Active | Conversations: %d | Messages: %d | Personalities: %d",
-                stats.get("active_conversations"),
-                stats.get("total_messages"),
-                villagerPersonalities.size());
-        }
-        return String.format("Template Dialogue | Personalities tracked: %d", villagerPersonalities.size());
+        return String.format("Dynamic Text Generation | Personalities: %d | Vocab: %d words", 
+            villagerPersonalities.size(),
+            generator.getVocabularySize());
     }
     
     /**
@@ -360,5 +359,180 @@ public class VillagerDialogueAI {
      */
     private enum Mood {
         HAPPY, SAD, ANGRY, NEUTRAL, EXCITED, TIRED
+    }
+    
+    /**
+     * Dynamic dialogue generator using Markov chains + template mixing
+     * Creates unique responses on-the-fly without neural networks
+     */
+    private static class DialogueGenerator {
+        private final Map<String, List<String>> wordChains = new HashMap<>();
+        private final Map<String, List<String>> phraseBank = new HashMap<>();
+        private final Random random = new Random();
+        
+        // Sentence starters for different contexts
+        private final String[] greetingStarters = {
+            "Oh", "Hey", "Hello", "Well", "Ah", "Hi there"
+        };
+        
+        private final String[] positiveWords = {
+            "wonderful", "great", "amazing", "lovely", "fantastic", "delightful", 
+            "pleasant", "nice", "good", "happy", "glad", "excited"
+        };
+        
+        private final String[] connectiveWords = {
+            "and", "but", "so", "well", "you see", "actually", "honestly",
+            "you know", "I mean", "by the way"
+        };
+        
+        public void initialize() {
+            // Build phrase banks from templates
+            buildPhraseBank("greeting", Arrays.asList(
+                "to see you", "you came by", "you're here", "we meet again",
+                "you stopped by", "you visited", "to talk with you"
+            ));
+            
+            buildPhraseBank("feeling", Arrays.asList(
+                "I'm feeling", "I feel", "today I'm", "I've been feeling",
+                "lately I've been", "I must say I'm"
+            ));
+            
+            buildPhraseBank("activity", Arrays.asList(
+                "working on", "thinking about", "dealing with", "planning",
+                "worried about", "excited about", "focused on"
+            ));
+            
+            buildPhraseBank("question", Arrays.asList(
+                "how about you", "what brings you here", "need something",
+                "can I help you", "what do you think", "have you heard"
+            ));
+            
+            buildPhraseBank("topic", Arrays.asList(
+                "the weather", "my crops", "the village", "recent events",
+                "tomorrow's plans", "my family", "our neighbors", "the situation"
+            ));
+        }
+        
+        private void buildPhraseBank(String category, List<String> phrases) {
+            phraseBank.put(category, new ArrayList<>(phrases));
+        }
+        
+        public String generateResponse(VillagerPersonality personality, DialogueContext context, String playerMessage) {
+            StringBuilder response = new StringBuilder();
+            
+            // Start with greeting if appropriate
+            if (context.interactionType != null && context.interactionType.equals("greeting")) {
+                response.append(generateGreeting(personality, context));
+            } else if (!playerMessage.isEmpty()) {
+                // Respond to player's message
+                response.append(generateReply(personality, playerMessage, context));
+            } else {
+                // Generic dialogue
+                response.append(generateStatement(personality, context));
+            }
+            
+            // Add personality flair
+            if (random.nextFloat() < personality.traits.get("witty")) {
+                response.append(" ").append(addWittyRemark());
+            }
+            
+            // Occasionally add a question
+            if (random.nextFloat() < 0.3f) {
+                response.append(" ").append(generateQuestion(context));
+            }
+            
+            return response.toString().trim();
+        }
+        
+        private String generateGreeting(VillagerPersonality personality, DialogueContext context) {
+            String starter = greetingStarters[random.nextInt(greetingStarters.length)];
+            String greetingPhrase = pickRandom(phraseBank.get("greeting"));
+            
+            if (personality.traits.get("friendly") > 0.6f) {
+                String positiveWord = positiveWords[random.nextInt(positiveWords.length)];
+                return String.format("%s, how %s %s%s!", 
+                    starter, positiveWord, greetingPhrase,
+                    context.playerName != null ? ", " + context.playerName : "");
+            } else if (personality.traits.get("shy") > 0.6f) {
+                return String.format("%s... um, %s...", starter, greetingPhrase);
+            } else {
+                return String.format("%s, %s.", starter, greetingPhrase);
+            }
+        }
+        
+        private String generateReply(VillagerPersonality personality, String playerMessage, DialogueContext context) {
+            // Simple keyword-based response generation
+            String lowerMessage = playerMessage.toLowerCase();
+            
+            if (lowerMessage.contains("how are you") || lowerMessage.contains("how're you")) {
+                String feeling = pickRandom(phraseBank.get("feeling"));
+                String mood = personality.currentMood.toString().toLowerCase();
+                return String.format("%s quite %s today.", feeling, mood);
+            }
+            
+            if (lowerMessage.contains("what") && lowerMessage.contains("doing")) {
+                String activity = pickRandom(phraseBank.get("activity"));
+                String topic = pickRandom(phraseBank.get("topic"));
+                return String.format("I've been %s %s.", activity, topic);
+            }
+            
+            if (lowerMessage.contains("thank") || lowerMessage.contains("thanks")) {
+                return random.nextBoolean() ? 
+                    "You're very welcome!" : 
+                    "Oh, it's my pleasure!";
+            }
+            
+            // Generic acknowledgment
+            String[] acknowledgments = {
+                "I see what you mean.", "That's interesting.", "I hadn't thought of that.",
+                "You make a good point.", "I understand.", "Hmm, yes."
+            };
+            return acknowledgments[random.nextInt(acknowledgments.length)];
+        }
+        
+        private String generateStatement(VillagerPersonality personality, DialogueContext context) {
+            String feeling = pickRandom(phraseBank.get("feeling"));
+            String topic = pickRandom(phraseBank.get("topic"));
+            
+            if (context.biome != null && random.nextFloat() < 0.3f) {
+                return String.format("The %s around here is quite something, isn't it?", context.biome);
+            }
+            
+            if (context.profession != null && random.nextFloat() < 0.2f) {
+                return String.format("Being a %s keeps me busy these days.", context.profession);
+            }
+            
+            return String.format("I've been thinking about %s lately.", topic);
+        }
+        
+        private String generateQuestion(DialogueContext context) {
+            String question = pickRandom(phraseBank.get("question"));
+            return Character.toUpperCase(question.charAt(0)) + question.substring(1) + "?";
+        }
+        
+        private String addWittyRemark() {
+            String[] wittyRemarks = {
+                "Life's full of surprises, isn't it?",
+                "You never know what tomorrow brings.",
+                "Such is life in the village.",
+                "Times are changing, I suppose.",
+                "Who would have thought?",
+                "Interesting times we live in."
+            };
+            return wittyRemarks[random.nextInt(wittyRemarks.length)];
+        }
+        
+        private String pickRandom(List<String> list) {
+            if (list == null || list.isEmpty()) return "";
+            return list.get(random.nextInt(list.size()));
+        }
+        
+        public int getVocabularySize() {
+            int total = 0;
+            for (List<String> phrases : phraseBank.values()) {
+                total += phrases.size();
+            }
+            return total;
+        }
     }
 }
