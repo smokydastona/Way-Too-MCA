@@ -155,8 +155,8 @@ public abstract class MobAIEnhancementMixin {
             boolean mobDied = !mob.isAlive();
             boolean playerDied = !target.isAlive();
             
-            // Record for learning
-            behaviorAI.recordCombatOutcome(mobId, playerDied, mobDied, finalState);
+            // Record for learning with mob entity for attribute correlation tracking
+            behaviorAI.recordCombatOutcome(mobId, playerDied, mobDied, finalState, 0.0f, 0.0f, mob);
         }
         
         /**
@@ -184,8 +184,8 @@ public abstract class MobAIEnhancementMixin {
             // Get mob type
             String mobType = mob.getClass().getSimpleName().toLowerCase();
             
-            // AI selects action (pass mob ID for tracking)
-            currentAction = behaviorAI.selectMobAction(mobType, state, mobId);
+            // AI selects action with contextual difficulty (pass mob entity for environmental context)
+            currentAction = behaviorAI.selectMobActionWithEntity(mobType, state, mobId, mob);
         }
         
         /**
@@ -238,6 +238,39 @@ public abstract class MobAIEnhancementMixin {
                     }
                     break;
                     
+                // === ENVIRONMENTAL INTERACTION TACTICS (Mob Control inspired) ===
+                case "break_cover":
+                    // Break blocks between mob and target
+                    breakBlocksToTarget();
+                    mob.getNavigation().moveTo(target, baseSpeed);
+                    break;
+                    
+                case "pillar_up":
+                    // Build dirt/blocks upward when low health
+                    if (mob.getHealth() / mob.getMaxHealth() < 0.3f) {
+                        pillarUpEscape();
+                    } else {
+                        mob.getNavigation().moveTo(target, baseSpeed);
+                    }
+                    break;
+                    
+                case "use_terrain":
+                    // Climb walls, swim strategically
+                    if (mob instanceof net.minecraft.world.entity.monster.Spider) {
+                        // Spiders climb to vantage points
+                        climbToAdvantage();
+                    }
+                    mob.getNavigation().moveTo(target, baseSpeed * 1.1);
+                    break;
+                    
+                case "block_path":
+                    // Place blocks to obstruct player
+                    if (distance > 3.0 && distance < 8.0) {
+                        blockPlayerPath();
+                    }
+                    mob.getNavigation().moveTo(target, baseSpeed);
+                    break;
+                    
                 default:
                     // Default behavior
                     mob.getNavigation().moveTo(target, baseSpeed);
@@ -279,6 +312,84 @@ public abstract class MobAIEnhancementMixin {
             double targetZ = mob.getZ() - Math.sin(angle) * distance;
             
             mob.getNavigation().moveTo(targetX, mob.getY(), targetZ, speed);
+        }
+        
+        // === ENVIRONMENTAL INTERACTION METHODS (Mob Control inspired) ===
+        
+        /**
+         * Break blocks between mob and target (destroys cover)
+         */
+        private void breakBlocksToTarget() {
+            if (target == null || !(mob.level() instanceof net.minecraft.server.level.ServerLevel)) return;
+            
+            net.minecraft.server.level.ServerLevel serverLevel = (net.minecraft.server.level.ServerLevel) mob.level();
+            net.minecraft.core.BlockPos mobPos = mob.blockPosition();
+            net.minecraft.core.BlockPos targetPos = target.blockPosition();
+            
+            // Find blocks in line of sight
+            net.minecraft.world.phys.Vec3 start = mob.position();
+            net.minecraft.world.phys.Vec3 end = target.position();
+            net.minecraft.world.phys.BlockHitResult hit = serverLevel.clip(
+                new net.minecraft.world.level.ClipContext(start, end, 
+                    net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                    net.minecraft.world.level.ClipContext.Fluid.NONE, mob)
+            );
+            
+            if (hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                net.minecraft.core.BlockPos blockPos = hit.getBlockPos();
+                net.minecraft.world.level.block.state.BlockState blockState = serverLevel.getBlockState(blockPos);
+                
+                // Only break weak blocks (dirt, planks, glass, etc.) - not obsidian/bedrock
+                if (!blockState.isAir() && blockState.getDestroySpeed(serverLevel, blockPos) < 10.0f) {
+                    serverLevel.destroyBlock(blockPos, true, mob);
+                }
+            }
+        }
+        
+        /**
+         * Pillar up using blocks (escape tactic)
+         */
+        private void pillarUpEscape() {
+            if (!(mob.level() instanceof net.minecraft.server.level.ServerLevel)) return;
+            
+            net.minecraft.server.level.ServerLevel serverLevel = (net.minecraft.server.level.ServerLevel) mob.level();
+            net.minecraft.core.BlockPos below = mob.blockPosition().below();
+            net.minecraft.world.level.block.state.BlockState belowState = serverLevel.getBlockState(below);
+            
+            // Place dirt block below to pillar up
+            if (belowState.isAir() && mob.getRandom().nextFloat() < 0.1f) {
+                serverLevel.setBlock(below, net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(), 3);
+            }
+        }
+        
+        /**
+         * Climb to advantageous position (spiders)
+         */
+        private void climbToAdvantage() {
+            if (target == null) return;
+            
+            // Find higher ground near target
+            net.minecraft.core.BlockPos targetPos = target.blockPosition().above(3);
+            mob.getNavigation().moveTo(targetPos.getX(), targetPos.getY(), targetPos.getZ(), speedModifier * 1.2);
+        }
+        
+        /**
+         * Block player's path with obstacles
+         */
+        private void blockPlayerPath() {
+            if (target == null || !(mob.level() instanceof net.minecraft.server.level.ServerLevel)) return;
+            
+            net.minecraft.server.level.ServerLevel serverLevel = (net.minecraft.server.level.ServerLevel) mob.level();
+            
+            // Calculate position between mob and player
+            double midX = (mob.getX() + target.getX()) / 2;
+            double midZ = (mob.getZ() + target.getZ()) / 2;
+            net.minecraft.core.BlockPos midPos = new net.minecraft.core.BlockPos((int)midX, (int)target.getY(), (int)midZ);
+            
+            // Place cobblestone if air
+            if (serverLevel.getBlockState(midPos).isAir() && mob.getRandom().nextFloat() < 0.05f) {
+                serverLevel.setBlock(midPos, net.minecraft.world.level.block.Blocks.COBBLESTONE.defaultBlockState(), 3);
+            }
         }
     }
 }

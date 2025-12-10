@@ -63,6 +63,11 @@
 	#Higher values = faster cross-species learning
 	#Range: 1.0 ~ 10.0
 	crossMobRewardMultiplier = 3.0
+	
+	#CONTEXTUAL AI DIFFICULTY: AI adapts to environment (Mob Control inspired)
+	#Mobs become HARDER at night, during storms, in Nether/End, near villages
+	#Creates dynamic gameplay where AI difficulty scales with risk/reward
+	enableContextualDifficulty = true
 
 [federated_learning]
 	#Enable federated learning (share AI knowledge across ALL servers globally)

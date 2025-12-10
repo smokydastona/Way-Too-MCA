@@ -160,6 +160,21 @@ public class GANCityMod {
                     } catch (Exception e) {
                         LOGGER.warn("Could not enable cross-mob learning: {}", e.getMessage());
                     }
+                    
+                    // Load contextual difficulty configuration (default enabled)
+                    try {
+                        // Default: contextual difficulty enabled
+                        boolean contextualEnabled = true;
+                        mobBehaviorAI.setContextualDifficulty(contextualEnabled);
+                        
+                        if (contextualEnabled) {
+                            LOGGER.info("✓ Contextual AI Difficulty ENABLED - Harder at night/storms/structures/dimensions");
+                            LOGGER.info("  Night: +30% | Storms: +20% | Thunderstorms: +50%");
+                            LOGGER.info("  Nether: +60% | End: +100% | Near Structures: +40%");
+                        }
+                    } catch (Exception e) {
+                        LOGGER.warn("Could not enable contextual difficulty: {}", e.getMessage());
+                    }
                 }
             }
         }

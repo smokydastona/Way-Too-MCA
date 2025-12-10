@@ -46,6 +46,16 @@ public class MobBehaviorAI {
     private boolean crossMobLearningEnabled = false;
     private float crossMobRewardMultiplier = 3.0f;
     
+    // Contextual AI difficulty scaling (Mob Control inspired)
+    private boolean contextualDifficultyEnabled = true;
+    private static final float NIGHT_DIFFICULTY_MULT = 1.3f;
+    private static final float STORM_DIFFICULTY_MULT = 1.2f;
+    private static final float THUNDERSTORM_DIFFICULTY_MULT = 1.5f;
+    private static final float STRUCTURE_PROXIMITY_MULT = 1.4f;
+    private static final float NETHER_DIFFICULTY_MULT = 1.6f;
+    private static final float END_DIFFICULTY_MULT = 2.0f;
+    private static final int STRUCTURE_SEARCH_RADIUS = 64;
+    
     private boolean mlEnabled = false;
     private final Map<String, MobBehaviorProfile> behaviorProfiles = new HashMap<>();
     private final Map<String, MobState> lastStateCache = new HashMap<>();
@@ -59,6 +69,11 @@ public class MobBehaviorAI {
     private final Map<String, Integer> mobLastThinkTick = new HashMap<>();
     private static final int THINK_INTERVAL = 15;  // Think every 15 ticks (0.75s)
     private int globalTick = 0;
+    
+    // Attribute-tactic correlation tracking (Mob Control inspired)
+    private final Map<String, AttributeTacticCorrelation> attributeCorrelations = new HashMap<>();
+    private static final float CORRELATION_THRESHOLD = 5.0f;  // Minimum reward to suggest
+    private static final int CORRELATION_SAMPLE_SIZE = 10;  // Samples before suggesting
 
     public MobBehaviorAI() {
         initializeDefaultProfiles();
@@ -204,6 +219,69 @@ public class MobBehaviorAI {
             LOGGER.info("Cross-Mob Emergent Learning: DISABLED");
         }
     }
+    
+    /**
+     * Configure contextual AI difficulty scaling
+     * @param enabled Whether AI difficulty adjusts based on time/weather/location
+     */
+    public void setContextualDifficulty(boolean enabled) {
+        this.contextualDifficultyEnabled = enabled;
+        
+        if (enabled) {
+            LOGGER.info("✓ Contextual AI Difficulty Scaling ENABLED - Harder at night/storms/structures");
+        } else {
+            LOGGER.info("✗ Contextual AI Difficulty Scaling DISABLED - Fixed difficulty");
+        }
+    }
+    
+    /**
+     * Calculate contextual difficulty multiplier based on environment
+     * Inspired by Mob Control's conditional spawn system
+     * @param mobEntity The mob entity (for position/dimension)
+     * @return Difficulty multiplier (1.0 = base, higher = harder)
+     */
+    public float getContextualDifficulty(net.minecraft.world.entity.Mob mobEntity) {
+        if (!contextualDifficultyEnabled || mobEntity == null) {
+            return difficultyMultiplier;
+        }
+        
+        float contextMultiplier = 1.0f;
+        net.minecraft.server.level.ServerLevel level = (net.minecraft.server.level.ServerLevel) mobEntity.level();
+        net.minecraft.core.BlockPos pos = mobEntity.blockPosition();
+        
+        // Time of day modifier (night = harder)
+        if (!level.isDay()) {
+            contextMultiplier *= NIGHT_DIFFICULTY_MULT;
+        }
+        
+        // Weather modifiers
+        if (level.isThundering()) {
+            contextMultiplier *= THUNDERSTORM_DIFFICULTY_MULT;
+        } else if (level.isRaining()) {
+            contextMultiplier *= STORM_DIFFICULTY_MULT;
+        }
+        
+        // Dimension modifiers (Nether/End = significantly harder)
+        String dimensionKey = level.dimension().location().toString();
+        if (dimensionKey.contains("nether")) {
+            contextMultiplier *= NETHER_DIFFICULTY_MULT;
+        } else if (dimensionKey.contains("the_end")) {
+            contextMultiplier *= END_DIFFICULTY_MULT;
+        }
+        
+        // Structure proximity (harder near villages, pillager outposts, etc.)
+        // Check for nearby structures using structure manager
+        try {
+            // In 1.20.1, check if mob is near any structure
+            if (level.structureManager().hasAnyStructureAt(pos)) {
+                contextMultiplier *= STRUCTURE_PROXIMITY_MULT;
+            }
+        } catch (Exception e) {
+            // Structure check failed, skip this modifier
+        }
+        
+        return difficultyMultiplier * contextMultiplier;
+    }
 
     /**
      * Initialize default behavior profiles for different mob types
@@ -212,17 +290,19 @@ public class MobBehaviorAI {
     private void initializeDefaultProfiles() {
         // ===== HOSTILE OVERWORLD MOBS =====
         
-        // Zombie behaviors
+        // Zombie behaviors (enhanced with environmental tactics)
         behaviorProfiles.put("zombie", new MobBehaviorProfile(
             "zombie",
-            Arrays.asList("straight_charge", "circle_strafe", "group_rush", "shamble_approach", "overwhelm"),
+            Arrays.asList("straight_charge", "circle_strafe", "group_rush", "shamble_approach", "overwhelm",
+                         "break_cover", "pillar_up", "use_terrain", "block_path"),
             0.7f  // aggression level
         ));
         
         // Zombie Variants
         behaviorProfiles.put("husk", new MobBehaviorProfile(
             "husk",
-            Arrays.asList("straight_charge", "circle_strafe", "group_rush", "desert_ambush", "heat_resistance"),
+            Arrays.asList("straight_charge", "circle_strafe", "group_rush", "desert_ambush", "heat_resistance",
+                         "break_cover", "use_terrain"),
             0.7f
         ));
         
@@ -739,6 +819,32 @@ public class MobBehaviorAI {
     public String selectMobAction(String mobType, MobState state, String mobId) {
         return selectMobAction(mobType, state, mobId, null);
     }
+    
+    /**
+     * Select next action with contextual difficulty based on mob entity
+     * Applies environmental modifiers (night/weather/dimension/structures)
+     * @param mobType Type of mob
+     * @param state Current state
+     * @param mobId Unique instance ID
+     * @param mobEntity The mob entity (for contextual difficulty)
+     * @return Selected action
+     */
+    public String selectMobActionWithEntity(String mobType, MobState state, String mobId, net.minecraft.world.entity.Mob mobEntity) {
+        // Apply contextual difficulty if enabled
+        if (contextualDifficultyEnabled && mobEntity != null) {
+            float originalDifficulty = difficultyMultiplier;
+            difficultyMultiplier = getContextualDifficulty(mobEntity);
+            
+            // Select action with modified difficulty
+            String action = selectMobAction(mobType, state, mobId, (net.minecraft.world.entity.player.Player) null);
+            
+            // Restore original difficulty
+            difficultyMultiplier = originalDifficulty;
+            return action;
+        }
+        
+        return selectMobAction(mobType, state, mobId, (net.minecraft.world.entity.player.Player) null);
+    }
 
     /**
      * Advanced ML-based action selection combining all systems
@@ -1065,9 +1171,10 @@ public class MobBehaviorAI {
     /**
      * Record combat outcome to improve AI with all advanced ML systems
      * ENHANCED: Applies massive reward multiplier for successful borrowed tactics
+     * @param mobEntity Optional mob entity for attribute correlation tracking
      */
     public void recordCombatOutcome(String mobId, boolean playerDied, boolean mobDied, MobState finalState, 
-                                    float damageDealt, float damageTaken) {
+                                    float damageDealt, float damageTaken, net.minecraft.world.entity.Mob mobEntity) {
         // Get cached state and action
         MobState initialState = lastStateCache.remove(mobId);
         String action = lastActionCache.remove(mobId);
@@ -1094,6 +1201,11 @@ public class MobBehaviorAI {
                     LOGGER.info("\u2605 EMERGENT BEHAVIOR: {} successfully used borrowed '{}' (reward: {:.1f} -> {:.1f})",
                         mobType, action, originalReward, reward);
                 }
+            }
+            
+            // Track attribute-tactic correlations (Mob Control inspired)
+            if (reward > CORRELATION_THRESHOLD && mobEntity != null) {
+                trackAttributeTacticCorrelation(mobType, action, reward, mobEntity);
             }
         }
         
@@ -1179,10 +1291,18 @@ public class MobBehaviorAI {
     }
     
     /**
+     * Backwards compatibility - old signature without mob entity
+     */
+    public void recordCombatOutcome(String mobId, boolean playerDied, boolean mobDied, MobState finalState, 
+                                    float damageDealt, float damageTaken) {
+        recordCombatOutcome(mobId, playerDied, mobDied, finalState, damageDealt, damageTaken, null);
+    }
+    
+    /**
      * Backwards compatibility - old signature
      */
     public void recordCombatOutcome(String mobId, boolean playerDied, boolean mobDied, MobState finalState) {
-        recordCombatOutcome(mobId, playerDied, mobDied, finalState, 0.0f, 0.0f);
+        recordCombatOutcome(mobId, playerDied, mobDied, finalState, 0.0f, 0.0f, null);
     }
     
     /**
@@ -1535,5 +1655,59 @@ public class MobBehaviorAI {
         
         // Force sync now (normally happens on schedule)
         federatedLearning.forceSyncNow();
+    }
+    
+    /**
+     * Track attribute-tactic correlations for optimization suggestions
+     * Inspired by Mob Control's attribute modification system
+     */
+    private void trackAttributeTacticCorrelation(String mobType, String action, float reward, 
+                                                   net.minecraft.world.entity.Mob mobEntity) {
+        if (mobEntity == null || reward < CORRELATION_THRESHOLD) return;
+        
+        String key = mobType + ":" + action;
+        AttributeTacticCorrelation correlation = attributeCorrelations.computeIfAbsent(key, 
+            k -> new AttributeTacticCorrelation(mobType, action));
+        
+        // Record mob's current attributes
+        float speed = (float) mobEntity.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
+        float health = mobEntity.getMaxHealth();
+        float damage = (float) mobEntity.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        
+        correlation.recordSample(speed, health, damage, reward);
+        
+        // Log suggestion if we have enough samples
+        if (correlation.sampleCount >= CORRELATION_SAMPLE_SIZE && correlation.sampleCount % 20 == 0) {
+            LOGGER.info("💡 OPTIMIZATION: {} using '{}' performs better with: speed>{}, health>{}, damage>{}",
+                mobType, action, String.format("%.2f", correlation.avgSpeed), 
+                String.format("%.1f", correlation.avgHealth), String.format("%.1f", correlation.avgDamage));
+        }
+    }
+    
+    /**
+     * Inner class to track attribute-tactic correlations
+     */
+    private static class AttributeTacticCorrelation {
+        String mobType;
+        String action;
+        int sampleCount = 0;
+        float avgSpeed = 0;
+        float avgHealth = 0;
+        float avgDamage = 0;
+        float avgReward = 0;
+        
+        AttributeTacticCorrelation(String mobType, String action) {
+            this.mobType = mobType;
+            this.action = action;
+        }
+        
+        void recordSample(float speed, float health, float damage, float reward) {
+            // Running average
+            avgSpeed = (avgSpeed * sampleCount + speed) / (sampleCount + 1);
+            avgHealth = (avgHealth * sampleCount + health) / (sampleCount + 1);
+            avgDamage = (avgDamage * sampleCount + damage) / (sampleCount + 1);
+            avgReward = (avgReward * sampleCount + reward) / (sampleCount + 1);
+            sampleCount++;
+        }
     }
 }
