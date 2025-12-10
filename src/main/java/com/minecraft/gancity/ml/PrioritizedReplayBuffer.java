@@ -129,6 +129,16 @@ public class PrioritizedReplayBuffer {
         return buffer.size();
     }
     
+    /**
+     * Get top N experiences by reward (for Cloudflare sync)
+     */
+    public List<Experience> getTopExperiences(int n) {
+        return buffer.stream()
+            .sorted((e1, e2) -> Float.compare(e2.reward, e1.reward))
+            .limit(n)
+            .collect(java.util.stream.Collectors.toList());
+    }
+    
     public static class Experience {
         final float[] state;
         final int action;

@@ -270,6 +270,48 @@ public class FederatedLearning {
         );
     }
     
+    /**
+     * Test Cloudflare connection (called on startup)
+     */
+    public boolean testConnection() {
+        if (!syncEnabled || apiClient == null) {
+            return false;
+        }
+        
+        try {
+            // Try to download tactics to test connection
+            Map<String, Object> result = apiClient.downloadTactics();
+            return result != null;
+        } catch (Exception e) {
+            LOGGER.error("Connection test failed: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Force immediate sync (called during auto-save)
+     */
+    public void forceSyncNow() {
+        if (!syncEnabled) {
+            return;
+        }
+        
+        LOGGER.info("[Federated Learning] Force sync triggered...");
+        
+        // Submit any pending local tactics
+        submitLocalTactics();
+        
+        // Download latest global tactics
+        downloadGlobalTactics();
+    }
+    
+    /**
+     * Check if federated learning is enabled
+     */
+    public boolean isEnabled() {
+        return syncEnabled;
+    }
+    
     // ==================== Inner Classes ====================
     
     /**

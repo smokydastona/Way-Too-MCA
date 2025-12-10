@@ -13,6 +13,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -30,6 +31,11 @@ public class GANCityMod {
     
     private static MobBehaviorAI mobBehaviorAI;
     private static VillagerDialogueAI villagerDialogueAI;
+    
+    // Auto-save tracking (10 minutes = 12000 ticks)
+    private static final int AUTO_SAVE_INTERVAL_TICKS = 12000;
+    private static int tickCounter = 0;
+    private static long lastSaveTime = 0;
 
     public GANCityMod() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -77,6 +83,43 @@ public class GANCityMod {
         LOGGER.info("MCA AI Enhanced - Server stopping, saving ML models...");
         if (mobBehaviorAI != null) {
             mobBehaviorAI.saveModel();
+        }
+    }
+    
+    @SubscribeEvent
+    public void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        
+        tickCounter++;
+        
+        // Auto-save every 10 minutes (12000 ticks)
+        if (tickCounter >= AUTO_SAVE_INTERVAL_TICKS) {
+            tickCounter = 0;
+            performAutoSave();
+        }
+    }
+    
+    private void performAutoSave() {
+        if (mobBehaviorAI == null) {
+            return;
+        }
+        
+        long currentTime = System.currentTimeMillis();
+        long timeSinceLastSave = (currentTime - lastSaveTime) / 1000; // seconds
+        
+        LOGGER.info("[AUTO-SAVE] Saving ML models (last save: {}s ago)...", timeSinceLastSave);
+        
+        try {
+            // Save models and sync with Cloudflare if enabled
+            mobBehaviorAI.saveModel();
+            mobBehaviorAI.syncWithCloudflare();
+            
+            lastSaveTime = currentTime;
+            LOGGER.info("[AUTO-SAVE] ✓ Models saved and synced successfully");
+        } catch (Exception e) {
+            LOGGER.error("[AUTO-SAVE] Failed to save models: {}", e.getMessage());
         }
     }
 
@@ -167,6 +210,17 @@ public class GANCityMod {
                     apiEndpoint.isEmpty() ? null : apiEndpoint,
                     apiKey.isEmpty() ? null : apiKey
                 );
+                
+                // Test Cloudflare connection
+                if (!apiEndpoint.isEmpty()) {
+                    LOGGER.info("Testing Cloudflare Worker connection...");
+                    boolean connected = ai.testCloudflareConnection();
+                    if (connected) {
+                        LOGGER.info("✓ Cloudflare Worker connected successfully!");
+                    } else {
+                        LOGGER.warn("⚠ Cloudflare Worker connection failed - running in offline mode");
+                    }
+                }
                 
                 LOGGER.info("✓ Federated learning enabled - Global AI knowledge sharing active!");
             } else {

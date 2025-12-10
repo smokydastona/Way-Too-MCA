@@ -1347,4 +1347,29 @@ public class MobBehaviorAI {
             return (float) successes / (successes + failures);
         }
     }
+    
+    /**
+     * Test Cloudflare Worker connection (called on startup)
+     */
+    public boolean testCloudflareConnection() {
+        if (federatedLearning == null || !federatedLearning.isEnabled()) {
+            LOGGER.warn("Federated learning not initialized");
+            return false;
+        }
+        
+        return federatedLearning.testConnection();
+    }
+    
+    /**
+     * Sync learned tactics with Cloudflare Worker (called during auto-save)
+     */
+    public void syncWithCloudflare() {
+        if (federatedLearning == null || !federatedLearning.isEnabled()) {
+            LOGGER.debug("Cloudflare sync skipped - federated learning not enabled");
+            return;
+        }
+        
+        // Force sync now (normally happens on schedule)
+        federatedLearning.forceSyncNow();
+    }
 }
