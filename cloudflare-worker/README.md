@@ -8,7 +8,8 @@ Cloudflare Workers deployment for global mob tactics aggregation and distributio
 ✅ **Timestamp Storage** - Stores and returns `lastUpdate` timestamps for each tactic  
 ✅ **Complete Data Model** - Returns `successRate`, `successCount`, `failureCount`, `lastUpdate`  
 ✅ **Extended Mob Support** - Added husk, stray, wither_skeleton, enderman  
-✅ **Enhanced Stats** - Returns top tactic for each mob type in stats endpoint
+✅ **Enhanced Stats** - Returns top tactic for each mob type in stats endpoint  
+✅ **GitHub Backup** - Automatically syncs tactics data to GitHub repository every 100 submissions
 
 ## Data Flow
 
@@ -91,6 +92,29 @@ Edit `config/mca-ai-enhanced-common.toml`:
 ```toml
 federatedLearningURL = "https://mca-ai-federated-learning.YOUR_SUBDOMAIN.workers.dev/"
 ```
+
+6. **(Optional) Enable GitHub Backup**
+
+Create a GitHub Personal Access Token:
+- Go to https://github.com/settings/tokens
+- Click "Generate new token (classic)"
+- Name it "MCA AI Federated Learning"
+- Select scope: `repo` (Full control of private repositories)
+- Click "Generate token"
+- Copy the token (starts with `ghp_`)
+
+Set the token as a Cloudflare secret:
+```bash
+wrangler secret put GITHUB_TOKEN
+# Paste your token when prompted
+```
+
+The worker will now automatically backup tactics to:
+`https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/tree/main/federated-data`
+
+**Sync triggers:**
+- Every 100 submissions per mob type
+- Manual trigger via `/api/process-pipeline` endpoint
 
 ## API Endpoints
 
@@ -206,6 +230,80 @@ curl -X POST http://localhost:8787/api/submit-tactics \
 ```bash
 curl http://localhost:8787/api/download-tactics
 ```
+
+## GitHub Backup System
+
+### How It Works
+
+The worker automatically backs up federated learning data to GitHub:
+
+**Repository:** `smokydastona/Adaptive-Minecraft-Mob-Ai`  
+**Path:** `federated-data/{mobType}-tactics.json`  
+**Frequency:** Every 100 submissions per mob type
+
+### Backup Triggers
+
+1. **Automatic (every 100 submissions):**
+```
+Submission 100 → GitHub backup triggered
+Submission 200 → GitHub backup triggered
+Submission 300 → GitHub backup triggered
+...
+```
+
+2. **Manual (pipeline endpoint):**
+```bash
+curl https://your-worker.workers.dev/api/process-pipeline
+```
+This backs up all mob types immediately.
+
+### File Format
+
+Each backup creates/updates a file like `federated-data/zombie-tactics.json`:
+```json
+{
+  "mobType": "zombie",
+  "submissions": 1500,
+  "lastUpdate": 1702156800000,
+  "syncedAt": 1702156900000,
+  "tactics": [
+    {
+      "action": "circle_strafe",
+      "avgReward": 8.5,
+      "count": 450,
+      "successRate": 0.87,
+      "successCount": 391,
+      "failureCount": 59,
+      "lastUpdate": 1702156800000
+    }
+  ]
+}
+```
+
+### Benefits
+
+- **Disaster Recovery** - Restore from GitHub if KV storage lost
+- **Version History** - GitHub tracks all changes with commits
+- **Public Dataset** - Community can analyze federated learning data
+- **Transparency** - Anyone can see what the AI has learned
+- **Research** - Data available for academic analysis
+
+### Viewing Backups
+
+Visit: https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/tree/main/federated-data
+
+You'll see files like:
+- `zombie-tactics.json`
+- `skeleton-tactics.json`
+- `creeper-tactics.json`
+- `spider-tactics.json`
+- etc.
+
+Each commit message shows how many submissions: "Federated learning: Update zombie tactics (1500 submissions)"
+
+### Disabling GitHub Backup
+
+If you don't want GitHub backup, simply don't set the `GITHUB_TOKEN` secret. The worker will continue functioning normally without it.
 
 ## Compatibility with Mod
 

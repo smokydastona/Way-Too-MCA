@@ -171,9 +171,10 @@ async function handleSubmitTactics(request, env, corsHeaders) {
     await incrementStats(env, 'totalSubmissions');
     
     // Schedule GitHub sync if enough new data (every 100 submissions)
-    if (existing.submissions % 100 === 0) {
-      // Note: GitHub sync would be triggered via scheduled worker or webhook
-      console.log(`${data.mobType} reached ${existing.submissions} submissions - sync recommended`);
+    if (existing.submissions % 100 === 0 && env.GITHUB_TOKEN) {
+      console.log(`${data.mobType} reached ${existing.submissions} submissions - triggering GitHub sync`);
+      // Trigger async GitHub backup (don't wait for it)
+      ctx.waitUntil(syncToGitHub(env, data.mobType, existing));
     }
     
     return new Response(JSON.stringify({
@@ -476,11 +477,32 @@ Provide a 2-sentence strategic recommendation.`;
     pipelineResults.stages.cloudflareAI = { status: 'success', model: 'Llama 3.1 8B' };
     pipelineResults.stages.huggingFace = { status: 'success', model: 'DistilBERT' };
     
-    // STAGE 5: Optional GitHub persistence (would happen here)
-    pipelineResults.stages.github = { 
-      status: 'skipped', 
-      note: 'Enable with GITHUB_TOKEN secret for automatic knowledge backup' 
-    };
+    // STAGE 5: GitHub persistence - backup all tactics to repository
+    if (env.GITHUB_TOKEN) {
+      console.log('Pipeline Stage 5: GitHub Persistence');
+      const githubResults = {};
+      
+      for (const mobType of mobTypes) {
+        const key = `tactics:${mobType}`;
+        const data = await env.TACTICS_KV.get(key, { type: 'json' });
+        
+        if (data && data.tactics) {
+          const syncResult = await syncToGitHub(env, mobType, data);
+          githubResults[mobType] = syncResult;
+        }
+      }
+      
+      pipelineResults.stages.github = { 
+        status: 'success',
+        note: 'Tactics backed up to smokydastona/Adaptive-Minecraft-Mob-Ai',
+        results: githubResults
+      };
+    } else {
+      pipelineResults.stages.github = { 
+        status: 'skipped', 
+        note: 'Enable with GITHUB_TOKEN secret for automatic knowledge backup' 
+      };
+    }
     
     return new Response(JSON.stringify(pipelineResults), {
       headers: { 
@@ -565,3 +587,118 @@ function calculateConfidence(cfResult, hfResult) {
   
   return 'low'; // AIs disagree
 }
+
+/**
+ * Sync tactics data to GitHub repository for persistence
+ * Repository: smokydastona/Adaptive-Minecraft-Mob-Ai
+ * Path: federated-data/{mobType}-tactics.json
+ */
+async function syncToGitHub(env, mobType, tacticsData) {
+  if (!env.GITHUB_TOKEN) {
+    console.log('GitHub sync skipped - GITHUB_TOKEN not configured');
+    return { status: 'skipped', reason: 'No GITHUB_TOKEN' };
+  }
+
+  try {
+    const owner = 'smokydastona';
+    const repo = 'Adaptive-Minecraft-Mob-Ai';
+    const branch = 'main';
+    const path = `federated-data/${mobType}-tactics.json`;
+    
+    // Prepare JSON content
+    const content = JSON.stringify({
+      mobType: mobType,
+      submissions: tacticsData.submissions,
+      lastUpdate: tacticsData.lastUpdate,
+      syncedAt: Date.now(),
+      tactics: Object.values(tacticsData.tactics)
+        .sort((a, b) => b.avgReward - a.avgReward)
+        .map(t => ({
+          action: t.action,
+          avgReward: t.avgReward,
+          count: t.count,
+          successRate: t.successRate || 0.0,
+          successCount: t.successCount || 0,
+          failureCount: t.failureCount || 0,
+          lastUpdate: t.lastUpdate
+        }))
+    }, null, 2);
+    
+    const encodedContent = btoa(content);
+    
+    // Get current file SHA (if exists) for updating
+    const getFileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    let fileSha = null;
+    
+    try {
+      const getResponse = await fetch(getFileUrl, {
+        headers: {
+          'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'MCA-AI-Federated-Learning'
+        }
+      });
+      
+      if (getResponse.ok) {
+        const fileData = await getResponse.json();
+        fileSha = fileData.sha;
+      }
+    } catch (e) {
+      console.log(`File ${path} doesn't exist yet, will create new`);
+    }
+    
+    // Create or update file
+    const commitMessage = `Federated learning: Update ${mobType} tactics (${tacticsData.submissions} submissions)`;
+    
+    const updatePayload = {
+      message: commitMessage,
+      content: encodedContent,
+      branch: branch
+    };
+    
+    if (fileSha) {
+      updatePayload.sha = fileSha; // Update existing file
+    }
+    
+    const updateResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'MCA-AI-Federated-Learning'
+        },
+        body: JSON.stringify(updatePayload)
+      }
+    );
+    
+    if (updateResponse.ok) {
+      const result = await updateResponse.json();
+      console.log(`✓ Synced ${mobType} tactics to GitHub: ${result.content.html_url}`);
+      return {
+        status: 'success',
+        url: result.content.html_url,
+        sha: result.content.sha,
+        submissions: tacticsData.submissions
+      };
+    } else {
+      const errorText = await updateResponse.text();
+      console.error(`GitHub sync failed: ${updateResponse.status} - ${errorText}`);
+      return {
+        status: 'error',
+        error: `GitHub API returned ${updateResponse.status}`,
+        details: errorText
+      };
+    }
+    
+  } catch (error) {
+    console.error('GitHub sync error:', error);
+    return {
+      status: 'error',
+      error: error.message
+    };
+  }
+}
+
