@@ -34,6 +34,12 @@ public class FederatedLearning {
     private static final long PULL_INTERVAL_MS = 600_000; // 10 minutes (download)
     private static final int MIN_DATA_POINTS = 10; // Minimum data before submitting
     
+    // Memory Management
+    private static final int MAX_TACTICS_PER_MOB = 50; // Keep top 50 tactics per mob type
+    private static final int MAX_TOTAL_TACTICS = 2000; // Global pool max (72 mobs × ~28 avg)
+    private static final long TACTIC_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000L; // 7 days
+    private static final float MIN_REWARD_THRESHOLD = 1.0f; // Prune tactics below this
+    
     // Cloudflare API Client
     private CloudflareAPIClient apiClient;
     private boolean syncEnabled = false;
@@ -237,13 +243,124 @@ public class FederatedLearning {
             }
             
             if (totalTacticsLoaded > 0) {
-                LOGGER.info("✓ Loaded {} global tactics from {} mob types into cross-species pool", 
+                LOGGER.info("\u2713 Loaded {} global tactics from {} mob types into cross-species pool", 
                     totalTacticsLoaded, globalTacticPool.size());
+                
+                // Prune to prevent unbounded growth
+                pruneGlobalTacticPool();
             }
             
         } catch (Exception e) {
             LOGGER.error("Error applying global tactics: {}", e.getMessage());
         }
+    }
+    
+    /**
+     * Prune global tactic pool to prevent unbounded memory growth
+     * Keeps only the best tactics and removes stale/low-performing entries
+     */
+    private void pruneGlobalTacticPool() {
+        int totalTacticsBefore = 0;
+        int totalTacticsAfter = 0;
+        long currentTime = System.currentTimeMillis();
+        
+        for (Map.Entry<String, Map<String, GlobalTactic>> mobEntry : globalTacticPool.entrySet()) {
+            String mobType = mobEntry.getKey();
+            Map<String, GlobalTactic> tactics = mobEntry.getValue();
+            
+            totalTacticsBefore += tactics.size();
+            
+            // Remove expired tactics (older than 7 days)
+            tactics.entrySet().removeIf(entry -> {
+                long age = currentTime - entry.getValue().timestamp;
+                return age > TACTIC_EXPIRY_MS;
+            });
+            
+            // Remove low-performing tactics
+            tactics.entrySet().removeIf(entry -> 
+                entry.getValue().avgReward < MIN_REWARD_THRESHOLD
+            );
+            
+            // If still too many, keep only top performers
+            if (tactics.size() > MAX_TACTICS_PER_MOB) {
+                List<Map.Entry<String, GlobalTactic>> sortedTactics = new ArrayList<>(tactics.entrySet());
+                sortedTactics.sort((a, b) -> 
+                    Float.compare(b.getValue().avgReward, a.getValue().avgReward)
+                );
+                
+                // Keep top MAX_TACTICS_PER_MOB
+                Set<String> toKeep = new HashSet<>();
+                for (int i = 0; i < Math.min(MAX_TACTICS_PER_MOB, sortedTactics.size()); i++) {
+                    toKeep.add(sortedTactics.get(i).getKey());
+                }
+                
+                tactics.keySet().retainAll(toKeep);
+            }
+            
+            totalTacticsAfter += tactics.size();
+        }
+        
+        // Global size check - if still too large, prune across all mobs
+        if (totalTacticsAfter > MAX_TOTAL_TACTICS) {
+            pruneGlobalPoolAcrossAllMobs();
+            
+            // Recount after global pruning
+            totalTacticsAfter = 0;
+            for (Map<String, GlobalTactic> tactics : globalTacticPool.values()) {
+                totalTacticsAfter += tactics.size();
+            }
+        }
+        
+        if (totalTacticsBefore > totalTacticsAfter) {
+            LOGGER.info("Pruned global tactic pool: {} -> {} tactics ({} removed)",
+                totalTacticsBefore, totalTacticsAfter, totalTacticsBefore - totalTacticsAfter);
+        }
+    }
+    
+    /**
+     * Aggressive pruning when total pool exceeds maximum size
+     * Keeps only the absolute best tactics across all mob types
+     */
+    private void pruneGlobalPoolAcrossAllMobs() {
+        // Collect ALL tactics from all mobs
+        List<Map.Entry<String, GlobalTactic>> allTactics = new ArrayList<>();
+        Map<GlobalTactic, String> tacticToMobType = new HashMap<>();
+        
+        for (Map.Entry<String, Map<String, GlobalTactic>> mobEntry : globalTacticPool.entrySet()) {
+            String mobType = mobEntry.getKey();
+            for (Map.Entry<String, GlobalTactic> tacticEntry : mobEntry.getValue().entrySet()) {
+                allTactics.add(tacticEntry);
+                tacticToMobType.put(tacticEntry.getValue(), mobType);
+            }
+        }
+        
+        // Sort by reward (descending)
+        allTactics.sort((a, b) -> 
+            Float.compare(b.getValue().avgReward, a.getValue().avgReward)
+        );
+        
+        // Keep only top MAX_TOTAL_TACTICS globally
+        Set<String> tacticsToKeep = new HashSet<>();
+        Map<String, Set<String>> keepPerMob = new HashMap<>();
+        
+        for (int i = 0; i < Math.min(MAX_TOTAL_TACTICS, allTactics.size()); i++) {
+            GlobalTactic tactic = allTactics.get(i).getValue();
+            String mobType = tacticToMobType.get(tactic);
+            String actionKey = allTactics.get(i).getKey();
+            
+            keepPerMob.computeIfAbsent(mobType, k -> new HashSet<>()).add(actionKey);
+        }
+        
+        // Apply pruning to each mob's tactics
+        for (Map.Entry<String, Map<String, GlobalTactic>> mobEntry : globalTacticPool.entrySet()) {
+            String mobType = mobEntry.getKey();
+            Map<String, GlobalTactic> tactics = mobEntry.getValue();
+            
+            Set<String> toKeep = keepPerMob.getOrDefault(mobType, Collections.emptySet());
+            tactics.keySet().retainAll(toKeep);
+        }
+        
+        LOGGER.warn("Aggressive pruning applied - global pool exceeded {} tactics", MAX_TOTAL_TACTICS);
     }
     
     /**
