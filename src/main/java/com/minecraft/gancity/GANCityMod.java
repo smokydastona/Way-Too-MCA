@@ -203,7 +203,7 @@ public class GANCityMod {
     private void initializeFederatedLearning() {
         try {
             // Read config (simple properties-based for now)
-            java.nio.file.Path configPath = java.nio.file.Paths.get("config", "mca-ai-enhanced-common.toml");
+            java.nio.file.Path configPath = java.nio.file.Paths.get("config", "adaptivemobai-common.toml");
             
             if (!java.nio.file.Files.exists(configPath)) {
                 LOGGER.info("Config file not found, creating default config...");

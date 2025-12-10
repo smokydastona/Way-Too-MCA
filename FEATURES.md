@@ -117,7 +117,7 @@ AI-powered conversations with evolving personalities:
 
 ## ⚙️ Configuration
 
-Edit `config/mca-ai-enhanced-common.toml`:
+Edit `config/adaptivemobai-common.toml`:
 
 ### Core Settings
 
@@ -166,9 +166,9 @@ dialogueRandomness = 0.3           # 0.0=Predictable, 1.0=Random
 **Requires OP level 2:**
 
 ```
-/mcaai info       - Show mod status and features
-/mcaai stats      - View ML statistics and learning progress
-/mcaai compat     - Check mod compatibility
+/amai info       - Show mod status and features
+/amai stats      - View ML statistics and learning progress
+/amai compat     - Check mod compatibility
 ```
 
 ---
@@ -262,7 +262,7 @@ Share and download mob behavior models via Cloudflare R2:
 
 1. Check config: `enableMobAI = true`?
 2. Check logs for "ML systems initialized"
-3. Try `/mcaai stats` to verify ML is active
+3. Try `/amai stats` to verify ML is active
 
 ### High CPU Usage
 

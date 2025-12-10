@@ -112,8 +112,8 @@ Class<?> villagerClass = Class.forName("mca.entity.VillagerEntityMCA");
   - Models loaded from `models/` directory if present, graceful fallback
 
 ### Configuration
-- Config file: `src/main/resources/mca-ai-enhanced-common.toml`
-- Runtime location: `config/mca-ai-enhanced-common.toml` in MC instance
+- Config file: `src/main/resources/adaptivemobai-common.toml`
+- Runtime location: `config/adaptivemobai-common.toml` in MC instance
 - Settings: `enableMobAI`, `aiDifficulty`, mob-specific toggles, dialogue variations
 
 ## Code Conventions
@@ -207,7 +207,7 @@ LOGGER.warn("MCA Reborn not found. Dialogue features disabled.");
 2. Templates support: `{player}`, `{biome}`, `{village}`, `{item}`, `{topic}`
 
 ### Modifying AI Difficulty
-- Config: `mca-ai-enhanced-common.toml` → `aiDifficulty = 1.0`
+- Config: `adaptivemobai-common.toml` → `aiDifficulty = 1.0`
 - Code: Affects weight calculation in `MobBehaviorAI.calculateActionWeight()`
 - Range: 0.5 (easy) to 3.0 (very hard)
 

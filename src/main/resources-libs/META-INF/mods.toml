@@ -3,32 +3,32 @@ loaderVersion="[47,)"
 license="MIT"
 
 [[mods]]
-modId="gancitylibs"
+modId="adaptivemobai_libs"
 version="${file.jarVersion}"
-displayName="MCA AI Enhanced - ML Libraries"
+displayName="Adaptive Mob AI - ML Libraries"
 description='''
-Optional machine learning libraries for MCA AI Enhanced.
+Optional machine learning libraries for Adaptive Mob AI.
 Provides DJL (Deep Java Library) and PyTorch for neural network learning.
 This JAR only contains libraries and has no game logic.
 '''
-authors="GAN City Team"
+authors="Adaptive Mob AI Team"
 
-[[dependencies.gancitylibs]]
+[[dependencies.adaptivemobai_libs]]
     modId="forge"
     mandatory=true
     versionRange="[47,)"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.gancitylibs]]
+[[dependencies.adaptivemobai_libs]]
     modId="minecraft"
     mandatory=true
     versionRange="[1.20.1,1.21)"
     ordering="NONE"
     side="BOTH"
 
-[[dependencies.gancitylibs]]
-    modId="gancity"
+[[dependencies.adaptivemobai_libs]]
+    modId="adaptivemobai"
     mandatory=true
     versionRange="[1.0,)"
     ordering="AFTER"
