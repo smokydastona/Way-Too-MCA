@@ -3,13 +3,16 @@ package com.minecraft.gancity.event;
 import com.minecraft.gancity.GANCityMod;
 import com.minecraft.gancity.ai.TacticTier;
 import com.mojang.logging.LogUtils;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Skeleton;
 import net.minecraft.world.entity.monster.Spider;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -165,5 +168,50 @@ public class MobTierAssignmentHandler {
      */
     public static boolean hasTier(Mob mob) {
         return mob.getPersistentData().getBoolean(TIER_ASSIGNED_TAG);
+    }
+    
+    /**
+     * Spawn particles around elite mobs every few ticks
+     */
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        
+        // Only check every 10 ticks (0.5 seconds) for performance
+        if (event.getServer().getTickCount() % 10 != 0) {
+            return;
+        }
+        
+        // Spawn particles for all elite mobs in all dimensions
+        for (ServerLevel level : event.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (entity instanceof Mob mob && hasTier(mob)) {
+                    TacticTier tier = getTierFromMob(mob);
+                    
+                    if (tier == TacticTier.ELITE) {
+                        // Spawn red flame particles in a circle around elite mobs
+                        double radius = 0.5;
+                        for (int i = 0; i < 3; i++) {
+                            double angle = RANDOM.nextDouble() * Math.PI * 2;
+                            double offsetX = Math.cos(angle) * radius;
+                            double offsetZ = Math.sin(angle) * radius;
+                            double offsetY = RANDOM.nextDouble() * mob.getBbHeight();
+                            
+                            level.sendParticles(
+                                ParticleTypes.FLAME,
+                                mob.getX() + offsetX,
+                                mob.getY() + offsetY,
+                                mob.getZ() + offsetZ,
+                                1, // particle count
+                                0.0, 0.05, 0.0, // velocity spread
+                                0.01 // speed
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
