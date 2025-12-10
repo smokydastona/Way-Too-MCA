@@ -116,6 +116,43 @@
 	#Creates dynamic gameplay where AI difficulty scales with risk/reward
 	enableContextualDifficulty = true
 
+[tactic_tiers]
+	# === Tactic Tier System ===
+	# Mobs spawn with ELITE, VETERAN, or ROOKIE tiers for combat variety
+	# Tiers are based on global tactic win rates from Cloudflare
+	
+	#Enable tactic tier system (creates mob variety)
+	#When true: Mobs spawn with different difficulty tiers
+	#When false: All mobs use standard difficulty
+	enableTierSystem = true
+	
+	#Elite mob spawn chance (top 10% tactics, 2x difficulty)
+	#These are the deadliest mobs using only proven winning tactics
+	#Range: 0.0 ~ 1.0
+	eliteSpawnWeight = 0.10
+	
+	#Veteran mob spawn chance (middle 50% tactics, 1x difficulty)
+	#Balanced mobs using reliable, proven tactics
+	#Range: 0.0 ~ 1.0
+	veteranSpawnWeight = 0.50
+	
+	#Rookie mob spawn chance (bottom 40% tactics, 0.5x difficulty)
+	#Easier mobs using experimental or less effective tactics
+	#Range: 0.0 ~ 1.0
+	rookieSpawnWeight = 0.40
+	
+	#Elite tier difficulty multiplier (2.0 = twice as hard)
+	#Range: 1.0 ~ 5.0
+	eliteDifficultyMultiplier = 2.0
+	
+	#Veteran tier difficulty multiplier (1.0 = normal)
+	#Range: 0.5 ~ 3.0
+	veteranDifficultyMultiplier = 1.0
+	
+	#Rookie tier difficulty multiplier (0.5 = half as hard)
+	#Range: 0.1 ~ 1.0
+	rookieDifficultyMultiplier = 0.5
+
 [federated_learning]
 	#Enable federated learning (share AI knowledge across ALL servers globally)
 	#Works out-of-the-box - no setup required!

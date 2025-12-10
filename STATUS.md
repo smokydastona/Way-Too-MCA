@@ -1,7 +1,7 @@
 # Adaptive Mob AI - Current Status
 
 **Last Updated:** December 10, 2025  
-**Version:** 1.0.88 (GitHub Actions)
+**Version:** 1.0.93 (GitHub Actions - IN PROGRESS)
 
 ---
 
@@ -14,6 +14,24 @@
 - ✅ **Curriculum Learning** - Progressive difficulty scaling
 - ✅ **Genetic Evolution** - Successful tactics propagate to offspring
 - ✅ **Performance Optimizer** - Shared model, caching (60-80% CPU reduction)
+- ✅ **Tactic Tier System (NEW v1.0.93)** - Mobs spawn with ELITE/VETERAN/ROOKIE tiers
+
+### Tactic Tier System (v1.0.93)
+**Creates natural difficulty variation in mob encounters:**
+- ✅ **Elite Mobs** (10% spawn rate) - Top tier tactics, 2.0x difficulty, +20% health/speed
+- ✅ **Veteran Mobs** (50% spawn rate) - Proven tactics, 1.0x difficulty, normal stats
+- ✅ **Rookie Mobs** (40% spawn rate) - Experimental tactics, 0.5x difficulty, -20% health/speed
+- ✅ **Tier Assignment** - Assigned on spawn via NBT, persists through save/reload
+- ✅ **Cloudflare Integration** - Uploads include tier + win rate for global sorting
+- ✅ **Config Options** - Fully customizable spawn weights and difficulty multipliers
+
+**How It Works:**
+1. Mob spawns → Random tier assigned (weighted: 10% elite, 50% veteran, 40% rookie)
+2. Tier stored in NBT: "AdaptiveMobAI_Tier"
+3. Stat modifiers applied: Elite +20% health/speed, Rookie -20% health/speed
+4. Combat AI uses tier difficulty multiplier (Elite 2x, Veteran 1x, Rookie 0.5x)
+5. Tactics uploaded to Cloudflare with win rate
+6. Cloudflare Worker sorts tactics by percentile into tier folders on GitHub
 
 ### Supported Mobs
 - ✅ Zombies - Circle strafe, ambush, retreat tactics

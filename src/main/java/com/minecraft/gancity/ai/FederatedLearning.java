@@ -136,7 +136,8 @@ public class FederatedLearning {
                     submission.mobType,
                     submission.action,
                     submission.getAverageReward(),
-                    submission.getSuccessRate() > 0.5f ? "success" : "failure"
+                    submission.getSuccessRate() > 0.5f ? "success" : "failure",
+                    submission.getSuccessRate()  // Pass win rate for tier calculation
                 );
                 
                 if (success) {
@@ -586,7 +587,8 @@ public class FederatedLearning {
                     submission.mobType,
                     submission.action,
                     submission.getAverageReward(),
-                    submission.getSuccessRate() > 0.5f ? "success" : "failure"
+                    submission.getSuccessRate() > 0.5f ? "success" : "failure",
+                    submission.getSuccessRate()  // Pass win rate for tier calculation
                 );
                 
                 if (success) {

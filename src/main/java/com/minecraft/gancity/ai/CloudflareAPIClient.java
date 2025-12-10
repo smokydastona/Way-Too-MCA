@@ -78,20 +78,30 @@ public class CloudflareAPIClient {
      * @param outcome Combat outcome (success/failure)
      */
     public CompletableFuture<Boolean> submitTacticAsync(String mobType, String action, 
-                                                         float reward, String outcome) {
+                                                         float reward, String outcome, float winRate) {
         return CompletableFuture.supplyAsync(() -> 
-            submitTactic(mobType, action, reward, outcome), executor
+            submitTactic(mobType, action, reward, outcome, winRate), executor
         );
     }
     
     /**
      * Submit a learned tactic to the global repository (blocking)
      * Uses GZIP compression if beneficial
+     * Automatically calculates and assigns tactic tier based on win rate
+     * 
+     * @param mobType The type of mob (zombie, skeleton, etc.)
+     * @param action The action taken
+     * @param reward The reward received
+     * @param outcome Success or failure outcome
+     * @param winRate Win rate (0.0-1.0) used to determine tier
      */
-    public boolean submitTactic(String mobType, String action, float reward, String outcome) {
+    public boolean submitTactic(String mobType, String action, float reward, String outcome, float winRate) {
         try {
             // Mark as dirty for potential batching
             dirtyTracker.markDirty(mobType, action);
+            
+            // Calculate tier based on win rate
+            TacticTier tier = TacticTier.fromWinRate(winRate);
             
             // Build JSON payload
             JsonObject payload = new JsonObject();
@@ -99,6 +109,8 @@ public class CloudflareAPIClient {
             payload.addProperty("action", action);
             payload.addProperty("reward", reward);
             payload.addProperty("outcome", outcome);
+            payload.addProperty("winRate", winRate);
+            payload.addProperty("tier", tier.getName());
             payload.addProperty("timestamp", System.currentTimeMillis());
             
             String jsonPayload = gson.toJson(payload);

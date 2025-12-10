@@ -1,5 +1,6 @@
 package com.minecraft.gancity.ai;
 
+import com.minecraft.gancity.event.MobTierAssignmentHandler;
 import com.minecraft.gancity.ml.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.world.entity.player.Player;
@@ -877,10 +878,20 @@ public class MobBehaviorAI {
      * @return Selected action
      */
     public String selectMobActionWithEntity(String mobType, MobState state, String mobId, net.minecraft.world.entity.Mob mobEntity) {
+        // Get mob's tactic tier for difficulty adjustment
+        TacticTier tier = TacticTier.VETERAN; // default
+        if (mobEntity != null && MobTierAssignmentHandler.hasTier(mobEntity)) {
+            tier = MobTierAssignmentHandler.getTierFromMob(mobEntity);
+        }
+        
         // Apply contextual difficulty if enabled
         if (contextualDifficultyEnabled && mobEntity != null) {
             float originalDifficulty = difficultyMultiplier;
-            difficultyMultiplier = getContextualDifficulty(mobEntity);
+            
+            // Combine contextual and tier difficulty
+            float contextDifficulty = getContextualDifficulty(mobEntity);
+            float tierDifficulty = tier.getDifficultyMultiplier();
+            difficultyMultiplier = contextDifficulty * tierDifficulty;
             
             // Select action with modified difficulty
             String action = selectMobAction(mobType, state, mobId, (net.minecraft.world.entity.player.Player) null);
@@ -890,7 +901,13 @@ public class MobBehaviorAI {
             return action;
         }
         
-        return selectMobAction(mobType, state, mobId, (net.minecraft.world.entity.player.Player) null);
+        // Apply only tier difficulty
+        float originalDifficulty = difficultyMultiplier;
+        difficultyMultiplier *= tier.getDifficultyMultiplier();
+        String action = selectMobAction(mobType, state, mobId, (net.minecraft.world.entity.player.Player) null);
+        difficultyMultiplier = originalDifficulty;
+        
+        return action;
     }
 
     /**
