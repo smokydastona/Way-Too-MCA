@@ -40,6 +40,10 @@ public class FederatedLearning {
     private static final long TACTIC_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000L; // 7 days
     private static final float MIN_REWARD_THRESHOLD = 1.0f; // Prune tactics below this
     
+    // Exploration vs Exploitation (keep gameplay interesting)
+    private static final float EXPLORATION_RATE = 0.15f; // 15% chance to resurrect pruned tactics
+    private static final int EXPLORATION_TACTICS_PER_MOB = 5; // Resurrect 5 random tactics per mob
+    
     // Cloudflare API Client
     private CloudflareAPIClient apiClient;
     private boolean syncEnabled = false;
@@ -243,11 +247,16 @@ public class FederatedLearning {
             }
             
             if (totalTacticsLoaded > 0) {
-                LOGGER.info("\u2713 Loaded {} global tactics from {} mob types into cross-species pool", 
+                LOGGER.info("✓ Loaded {} global tactics from {} mob types into cross-species pool", 
                     totalTacticsLoaded, globalTacticPool.size());
                 
                 // Prune to prevent unbounded growth
                 pruneGlobalTacticPool();
+                
+                // Randomly resurrect some pruned tactics for exploration
+                if (Math.random() < EXPLORATION_RATE) {
+                    reintroducePrunedTactics(tacticsData);
+                }
             }
             
         } catch (Exception e) {
@@ -361,6 +370,81 @@ public class FederatedLearning {
         }
         
         LOGGER.warn("Aggressive pruning applied - global pool exceeded {} tactics", MAX_TOTAL_TACTICS);
+    }
+    
+    /**
+     * Randomly reintroduce pruned tactics for exploration (prevents local optima)
+     * 15% chance to resurrect 5 random "bad" tactics per mob to test if they're good now
+     */
+    @SuppressWarnings("unchecked")
+    private void reintroducePrunedTactics(Map<String, Object> fullTacticsData) {
+        try {
+            Map<String, Object> allTactics = (Map<String, Object>) fullTacticsData.get("tactics");
+            if (allTactics == null) return;
+            
+            Random random = new Random();
+            int resurrectedCount = 0;
+            
+            for (Map.Entry<String, Object> entry : allTactics.entrySet()) {
+                String mobType = entry.getKey();
+                Map<String, Object> mobData = (Map<String, Object>) entry.getValue();
+                List<Map<String, Object>> allMobTactics = (List<Map<String, Object>>) mobData.get("tactics");
+                
+                if (allMobTactics == null || allMobTactics.isEmpty()) continue;
+                
+                // Get currently active tactics for this mob
+                Map<String, GlobalTactic> activeTactics = globalTacticPool.getOrDefault(
+                    mobType, new ConcurrentHashMap<>());
+                
+                // Find tactics that were pruned (in full download but not in active pool)
+                List<Map<String, Object>> prunedTactics = new ArrayList<>();
+                for (Map<String, Object> tacticData : allMobTactics) {
+                    String action = (String) tacticData.get("action");
+                    if (!activeTactics.containsKey(action)) {
+                        prunedTactics.add(tacticData);
+                    }
+                }
+                
+                if (prunedTactics.isEmpty()) continue;
+                
+                // Resurrect EXPLORATION_TACTICS_PER_MOB random pruned tactics
+                Collections.shuffle(prunedTactics, random);
+                int toResurrect = Math.min(EXPLORATION_TACTICS_PER_MOB, prunedTactics.size());
+                
+                for (int i = 0; i < toResurrect; i++) {
+                    Map<String, Object> tacticData = prunedTactics.get(i);
+                    String action = (String) tacticData.get("action");
+                    Object avgRewardObj = tacticData.get("avgReward");
+                    
+                    float avgReward = 0.0f;
+                    if (avgRewardObj instanceof Number) {
+                        avgReward = ((Number) avgRewardObj).floatValue();
+                    }
+                    
+                    // Create resurrected tactic with reset timestamp (fresh start)
+                    GlobalTactic resurrected = new GlobalTactic(
+                        mobType,
+                        action,
+                        avgReward,
+                        System.currentTimeMillis() // Fresh timestamp for re-testing
+                    );
+                    
+                    activeTactics.put(action, resurrected);
+                    resurrectedCount++;
+                    
+                    LOGGER.debug("🔄 EXPLORATION: Resurrected {} tactic '{}' (reward: {:.2f}) for re-testing",
+                        mobType, action, avgReward);
+                }
+            }
+            
+            if (resurrectedCount > 0) {
+                LOGGER.info("🔄 Exploration mode: Resurrected {} previously pruned tactics for re-testing",
+                    resurrectedCount);
+            }
+            
+        } catch (Exception e) {
+            LOGGER.error("Error reintroducing pruned tactics: {}", e.getMessage());
+        }
     }
     
     /**
