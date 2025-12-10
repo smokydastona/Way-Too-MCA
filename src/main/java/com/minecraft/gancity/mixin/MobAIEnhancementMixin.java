@@ -24,10 +24,19 @@ public abstract class MobAIEnhancementMixin {
     /**
      * Inject AI-enhanced behavior when mob registers goals
      * Now applies to ALL mobs, not just monsters - passive mobs learn evasion
+     * MCA COMPATIBLE: Detects MCA villagers and skips aggressive AI
      */
     @Inject(method = "registerGoals", at = @At("TAIL"))
     private void onRegisterGoals(CallbackInfo ci) {
         Mob mob = (Mob)(Object)this;
+        
+        // MCA INTEGRATION: Skip MCA villagers to avoid conflicts
+        String className = mob.getClass().getName();
+        if (className.contains("mca.entity.VillagerEntityMCA") || 
+            className.contains("mca.entity.ai")) {
+            // MCA villagers have their own behavior system - don't override
+            return;
+        }
         
         // Add AI-enhanced combat/survival goal to ALL mobs
         // Hostile mobs learn combat tactics, passive mobs learn evasion and survival
@@ -318,6 +327,7 @@ public abstract class MobAIEnhancementMixin {
         
         /**
          * Break blocks between mob and target (destroys cover)
+         * MCA PROTECTION: Avoids breaking valuable/structure blocks
          */
         private void breakBlocksToTarget() {
             if (target == null || !(mob.level() instanceof net.minecraft.server.level.ServerLevel)) return;
@@ -339,8 +349,18 @@ public abstract class MobAIEnhancementMixin {
                 net.minecraft.core.BlockPos blockPos = hit.getBlockPos();
                 net.minecraft.world.level.block.state.BlockState blockState = serverLevel.getBlockState(blockPos);
                 
-                // Only break weak blocks (dirt, planks, glass, etc.) - not obsidian/bedrock
-                if (!blockState.isAir() && blockState.getDestroySpeed(serverLevel, blockPos) < 10.0f) {
+                // MCA PROTECTION: Don't break valuable blocks (chests, beds, crafting tables, etc.)
+                net.minecraft.world.level.block.Block block = blockState.getBlock();
+                String blockName = block.getDescriptionId();
+                if (blockName.contains("chest") || blockName.contains("bed") || 
+                    blockName.contains("crafting") || blockName.contains("furnace") ||
+                    blockName.contains("door") || blockName.contains("_log") || 
+                    blockName.contains("planks")) {
+                    return; // Don't break village infrastructure
+                }
+                
+                // Only break weak disposable blocks (dirt, grass, glass, leaves, etc.)
+                if (!blockState.isAir() && blockState.getDestroySpeed(serverLevel, blockPos) < 5.0f) {
                     serverLevel.destroyBlock(blockPos, true, mob);
                 }
             }
