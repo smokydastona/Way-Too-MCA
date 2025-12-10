@@ -26,7 +26,7 @@ import org.slf4j.Logger;
 @Mod(GANCityMod.MODID)
 @Mod.EventBusSubscriber(modid = GANCityMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.DEDICATED_SERVER)
 public class GANCityMod {
-    public static final String MODID = "gancity";
+    public static final String MODID = "adaptivemobai";
     private static final Logger LOGGER = LogUtils.getLogger();
     
     private static MobBehaviorAI mobBehaviorAI;

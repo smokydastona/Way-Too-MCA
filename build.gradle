@@ -22,10 +22,10 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
-            property 'forge.enabledGameTestNamespaces', 'gancity'
+            property 'forge.enabledGameTestNamespaces', 'adaptivemobai'
 
             mods {
-                gancity {
+                adaptivemobai {
                     source sourceSets.main
                 }
             }
@@ -35,10 +35,10 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
-            property 'forge.enabledGameTestNamespaces', 'gancity'
+            property 'forge.enabledGameTestNamespaces', 'adaptivemobai'
 
             mods {
-                gancity {
+                adaptivemobai {
                     source sourceSets.main
                 }
             }
@@ -49,10 +49,10 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
 
-            args '--mod', 'gancity', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            args '--mod', 'adaptivemobai', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
 
             mods {
-                gancity {
+                adaptivemobai {
                     source sourceSets.main
                 }
             }

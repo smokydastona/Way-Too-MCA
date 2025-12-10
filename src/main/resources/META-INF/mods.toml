@@ -4,7 +4,7 @@ license="MIT"
 issueTrackerURL="https://github.com/BluShine/Minecraft-GAN-City-Generator/issues"
 
 [[mods]]
-modId="gancity"
+modId="adaptivemobai"
 version="${file.jarVersion}"
 displayName="MCA AI Enhanced - Intelligent Villagers & Mobs"
 logoFile="logo.png"
@@ -16,21 +16,21 @@ Features adaptive combat AI, dynamic dialogue generation, and personality learni
 Powered by Deep Java Library (DJL) for AI inference.
 '''
 
-[[dependencies.gancity]]
+[[dependencies.adaptivemobai]]
     modId="forge"
     mandatory=true
     versionRange="[47,)"
     ordering="NONE"
     side="SERVER"
 
-[[dependencies.gancity]]
+[[dependencies.adaptivemobai]]
     modId="minecraft"
     mandatory=true
     versionRange="[1.20.1,1.21)"
     ordering="NONE"
     side="SERVER"
 
-[[dependencies.gancity]]
+[[dependencies.adaptivemobai]]
     modId="mca"
     mandatory=false
     versionRange="[7.5.5,)"

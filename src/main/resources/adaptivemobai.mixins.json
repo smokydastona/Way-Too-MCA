@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "com.minecraft.gancity.mixin",
   "compatibilityLevel": "JAVA_17",
-  "refmap": "gancity.refmap.json",
+  "refmap": "adaptivemobai.refmap.json",
   "mixins": [
   ],
   "client": [
