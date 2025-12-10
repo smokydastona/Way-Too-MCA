@@ -1,35 +1,82 @@
+# =====================================================
+# MCA AI Enhanced - Configuration
+# Machine Learning Mob AI for Minecraft 1.20.1
+# =====================================================
+
 [general]
+	# === Core Settings ===
+	
 	#Enable AI-enhanced mob behavior
+	#When true: Mobs use machine learning to adapt tactics
+	#When false: Mobs use vanilla behavior
 	enableMobAI = true
 	
 	#Enable AI-powered villager dialogue (requires MCA Reborn)
+	#When true: Villagers have AI-generated conversations
+	#When false: Villagers use default MCA dialogue
 	enableVillagerDialogue = true
 	
 	#Allow mobs to learn from combat outcomes
+	#When true: Mobs remember successful tactics and improve over time
+	#When false: Mobs use pre-trained AI without learning
 	enableLearning = true
 	
-	#Mob AI difficulty multiplier (1.0 = normal, 2.0 = hard)
+	#Mob AI difficulty multiplier
+	#0.5 = Easy (slower reactions, basic tactics)
+	#1.0 = Normal (balanced AI)
+	#2.0 = Hard (aggressive tactics, quick reactions)
+	#3.0 = Expert (advanced coordination, perfect timing)
 	#Range: 0.5 ~ 3.0
 	aiDifficulty = 1.0
 
 [mob_behaviors]
+	# === Individual Mob AI Toggles ===
+	
 	#Enable adaptive behavior for Zombies
+	#Tactics: Circle strafing, group coordination, retreat when low health
 	enableZombieAI = true
 	
 	#Enable adaptive behavior for Skeletons
+	#Tactics: Kiting, cover usage, aim prediction
 	enableSkeletonAI = true
 	
 	#Enable adaptive behavior for Creepers
+	#Tactics: Flanking, hiding, explosion timing optimization
 	enableCreeperAI = true
 	
 	#Enable adaptive behavior for Spiders
+	#Tactics: Wall climbing ambush, pack hunting, cave advantage
 	enableSpiderAI = true
 	
-	#Ticks between AI decision updates
+	#How often mobs update AI decisions (in ticks)
+	#Lower = More reactive but higher CPU usage
+	#Higher = Less reactive but better performance
+	#20 ticks = 1 second (recommended)
 	#Range: 10 ~ 100
 	aiUpdateInterval = 20
 
+[fallback]
+	# === Vanilla AI Enhancements (when ML disabled) ===
+	# These apply when enableMobAI=false or ML system fails to load
+	
+	#Increase mob pathfinding speed multiplier
+	#1.0 = vanilla speed, 1.5 = 50% faster pathfinding
+	#Range: 1.0 ~ 2.0
+	pathfindingSpeedMultiplier = 1.2
+	
+	#Increase mob detection range multiplier
+	#1.0 = vanilla range, 1.5 = 50% further detection
+	#Range: 1.0 ~ 2.0
+	detectionRangeMultiplier = 1.3
+	
+	#Reduce mob reaction time (in ticks)
+	#Lower = faster reactions
+	#20 = 1 second, 10 = 0.5 seconds
+	#Range: 5 ~ 40
+	reactionTimeTicks = 15
+
 [villager_dialogue]
+	# === Villager AI Dialogue Settings ===
 	#Number of dialogue variations to generate
 	#Range: 1 ~ 10
 	dialogueVariations = 3
