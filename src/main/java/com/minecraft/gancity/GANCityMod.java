@@ -207,7 +207,7 @@ public class GANCityMod {
             
             if (!java.nio.file.Files.exists(configPath)) {
                 LOGGER.info("Config file not found, creating default config...");
-                createDefaultConfig(configPath);
+                createDefaultConfigFromResources(configPath);
             }
             
             // Parse TOML config
@@ -273,14 +273,14 @@ public class GANCityMod {
     }
     
     /**
-     * Create default config file
+     * Create default config file from resources
      */
-    private void createDefaultConfig(java.nio.file.Path configPath) throws java.io.IOException {
+    private void createDefaultConfigFromResources(java.nio.file.Path configPath) throws java.io.IOException {
         // Create config directory if it doesn't exist
         java.nio.file.Files.createDirectories(configPath.getParent());
         
         // Copy from resources to config directory
-        try (java.io.InputStream inputStream = getClass().getResourceAsStream("/mca-ai-enhanced-common.toml")) {
+        try (java.io.InputStream inputStream = getClass().getResourceAsStream("/adaptivemobai-common.toml")) {
             if (inputStream != null) {
                 java.nio.file.Files.copy(inputStream, configPath);
                 LOGGER.info("Created default config at {}", configPath);
