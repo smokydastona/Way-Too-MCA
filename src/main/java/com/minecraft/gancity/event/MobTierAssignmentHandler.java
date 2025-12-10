@@ -8,10 +8,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.Creeper;
-import net.minecraft.world.entity.monster.Skeleton;
-import net.minecraft.world.entity.monster.Spider;
-import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.monster.*;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -86,12 +83,11 @@ public class MobTierAssignmentHandler {
     
     /**
      * Check if mob type is supported by adaptive AI
+     * Now supports ALL hostile mobs
      */
     private static boolean isSupportedMob(Entity entity) {
-        return entity instanceof Zombie || 
-               entity instanceof Skeleton || 
-               entity instanceof Creeper || 
-               entity instanceof Spider;
+        // Support all Enemy type mobs (hostile mobs)
+        return entity instanceof Enemy;
     }
     
     /**
