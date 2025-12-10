@@ -495,6 +495,49 @@ public class MobBehaviorAI {
             0.5f  // Defensive
         ));
         
+        // ===== MCA VILLAGER GUARD PROFILES =====
+        // Each MCA villager gets ONE of these assigned permanently at creation
+        // Profiles persist through restarts/updates (stored in NBT data)
+        // NO ENVIRONMENTAL TACTICS (no block breaking/placing)
+        
+        behaviorProfiles.put("aggressive_guard", new MobBehaviorProfile(
+            "aggressive_guard",
+            Arrays.asList("straight_charge", "group_rush", "melee_rush", "overwhelm", "pursue_relentlessly"),
+            0.85f  // Very aggressive guard
+        ));
+        
+        behaviorProfiles.put("defensive_guard", new MobBehaviorProfile(
+            "defensive_guard",
+            Arrays.asList("circle_strafe", "protect_villagers", "kite_backward", "retreat_reload", "area_control"),
+            0.4f  // Cautious defender
+        ));
+        
+        behaviorProfiles.put("tactical_guard", new MobBehaviorProfile(
+            "tactical_guard",
+            Arrays.asList("ambush", "fake_retreat", "circle_strafe", "strafe_shoot", "coordinated_attack"),
+            0.65f  // Balanced tactical fighter
+        ));
+        
+        behaviorProfiles.put("cautious_defender", new MobBehaviorProfile(
+            "cautious_defender",
+            Arrays.asList("kite_backward", "retreat", "find_cover", "defensive_stance", "wait_for_backup"),
+            0.3f  // Very defensive
+        ));
+        
+        behaviorProfiles.put("berserker_guard", new MobBehaviorProfile(
+            "berserker_guard",
+            Arrays.asList("suicide_rush", "straight_charge", "aggressive_rush", "overwhelm", "no_mercy"),
+            0.95f  // Fearless attacker
+        ));
+        
+        behaviorProfiles.put("strategic_defender", new MobBehaviorProfile(
+            "strategic_defender",
+            Arrays.asList("village_patrol", "pack_coordination", "tactical_retreat", "group_formation", "defend_home"),
+            0.55f  // Coordinated team fighter
+        ));
+        
+        // ===== REGULAR PASSIVE MOBS =====
+        
         behaviorProfiles.put("panda", new MobBehaviorProfile(
             "panda",
             Arrays.asList("roll_attack", "bamboo_defend", "aggressive_variant", "sneeze_startle", "playful_charge"),

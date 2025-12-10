@@ -24,55 +24,98 @@ public abstract class MobAIEnhancementMixin {
     /**
      * Inject AI-enhanced behavior when mob registers goals
      * Now applies to ALL mobs, not just monsters - passive mobs learn evasion
-     * MCA COMPATIBLE: Detects MCA villagers and skips aggressive AI
+     * MCA ENHANCED: MCA villagers get unique persistent tactical profiles
      */
     @Inject(method = "registerGoals", at = @At("TAIL"))
     private void onRegisterGoals(CallbackInfo ci) {
         Mob mob = (Mob)(Object)this;
         
-        // MCA INTEGRATION: Skip MCA villagers to avoid conflicts
+        // MCA INTEGRATION: MCA villagers get ATTACK TACTICS but not environmental
         String className = mob.getClass().getName();
-        if (className.contains("mca.entity.VillagerEntityMCA") || 
-            className.contains("mca.entity.ai")) {
-            // MCA villagers have their own behavior system - don't override
+        boolean isMCAVillager = className.contains("mca.entity.VillagerEntityMCA") || 
+                                className.contains("mca.entity.ai");
+        
+        if (isMCAVillager) {
+            // MCA villagers get unique combat AI (for guards, self-defense)
+            // Lower priority (6) to not override MCA's core behavior
+            // enableEnvironmental = false (no block breaking/pillaring)
+            mob.goalSelector.addGoal(6, new AIEnhancedMeleeGoal(mob, 1.0, false, false, true));
             return;
         }
         
-        // Add AI-enhanced combat/survival goal to ALL mobs
+        // Add AI-enhanced combat/survival goal to ALL other mobs
         // Hostile mobs learn combat tactics, passive mobs learn evasion and survival
         if (mob instanceof Monster) {
-            // Hostile mobs get aggressive AI
-            mob.goalSelector.addGoal(2, new AIEnhancedMeleeGoal(mob, 1.0, true));
+            // Hostile mobs get aggressive AI with environmental tactics
+            mob.goalSelector.addGoal(2, new AIEnhancedMeleeGoal(mob, 1.0, true, true, false));
         } else {
             // Neutral and passive mobs get survival/evasion AI (lower priority to not override core behavior)
-            mob.goalSelector.addGoal(5, new AIEnhancedMeleeGoal(mob, 1.2, false));
+            mob.goalSelector.addGoal(5, new AIEnhancedMeleeGoal(mob, 1.2, false, true, false));
         }
     }
     
     /**
      * AI-Enhanced Melee Attack Goal
      * Uses machine learning to select attack patterns
+     * MCA SUPPORT: Persistent individual profiles for villagers
      */
     private static class AIEnhancedMeleeGoal extends Goal {
         private final Mob mob;
         private final double speedModifier;
         private final boolean followingTargetEvenIfNotSeen;
+        private final boolean enableEnvironmentalTactics;  // Block breaking, pillaring, etc.
+        private final boolean isMCAVillager;  // Persistent profile support
         private LivingEntity target;
         private int ticksUntilNextAction;
         private String currentAction = "straight_charge";
         private final MobBehaviorAI behaviorAI;
         private final String mobId;  // Unique ID for this mob instance
+        private String persistentProfile = null;  // MCA villager's permanent tactical profile
         private float initialMobHealth;
         private float initialTargetHealth;
         private int combatTicks = 0;
         
-        public AIEnhancedMeleeGoal(Mob mob, double speedModifier, boolean followEvenIfNotSeen) {
+        public AIEnhancedMeleeGoal(Mob mob, double speedModifier, boolean followEvenIfNotSeen, 
+                                   boolean enableEnvironmental, boolean isMCA) {
             this.mob = mob;
             this.speedModifier = speedModifier;
             this.followingTargetEvenIfNotSeen = followEvenIfNotSeen;
+            this.enableEnvironmentalTactics = enableEnvironmental;
+            this.isMCAVillager = isMCA;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
             this.behaviorAI = GANCityMod.getMobBehaviorAI();
             this.mobId = mob.getUUID().toString();
+            
+            // MCA VILLAGERS: Assign permanent tactical profile on creation
+            if (isMCA) {
+                this.persistentProfile = loadOrCreatePersistentProfile();
+            }
+        }
+        
+        /**
+         * Load or create a permanent tactical profile for this MCA villager
+         * Profile stored in mob's persistent data, survives restarts/updates
+         */
+        private String loadOrCreatePersistentProfile() {
+            try {
+                // Try to load existing profile from persistent data
+                net.minecraft.nbt.CompoundTag persistentData = mob.getPersistentData();
+                if (persistentData.contains("MCA_AI_Profile")) {
+                    return persistentData.getString("MCA_AI_Profile");
+                }
+                
+                // Create new random profile (one-time assignment)
+                String[] profiles = {"aggressive_guard", "defensive_guard", "tactical_guard", 
+                                    "cautious_defender", "berserker_guard", "strategic_defender"};
+                String newProfile = profiles[mob.getRandom().nextInt(profiles.length)];
+                
+                // Save to persistent data (survives world reload, mod updates)
+                persistentData.putString("MCA_AI_Profile", newProfile);
+                
+                return newProfile;
+            } catch (Exception e) {
+                return "defensive_guard";  // Fallback
+            }
         }
         
         @Override
@@ -170,6 +213,7 @@ public abstract class MobAIEnhancementMixin {
         
         /**
          * Select next action using AI with mob instance tracking
+         * MCA VILLAGERS: Use persistent profile for consistent behavior
          */
         private void selectNextAction() {
             if (target == null) return;
@@ -191,7 +235,14 @@ public abstract class MobAIEnhancementMixin {
             }
             
             // Get mob type
-            String mobType = mob.getClass().getSimpleName().toLowerCase();
+            String mobType;
+            if (isMCAVillager && persistentProfile != null) {
+                // MCA villagers use their permanent tactical profile
+                mobType = persistentProfile;
+            } else {
+                // Regular mobs use class-based type
+                mobType = mob.getClass().getSimpleName().toLowerCase();
+            }
             
             // AI selects action with contextual difficulty (pass mob entity for environmental context)
             currentAction = behaviorAI.selectMobActionWithEntity(mobType, state, mobId, mob);
@@ -248,34 +299,42 @@ public abstract class MobAIEnhancementMixin {
                     break;
                     
                 // === ENVIRONMENTAL INTERACTION TACTICS (Mob Control inspired) ===
+                // MCA VILLAGERS SKIP THESE (no block breaking/placing)
                 case "break_cover":
-                    // Break blocks between mob and target
-                    breakBlocksToTarget();
+                    if (enableEnvironmentalTactics) {
+                        // Break blocks between mob and target
+                        breakBlocksToTarget();
+                    }
                     mob.getNavigation().moveTo(target, baseSpeed);
                     break;
                     
                 case "pillar_up":
-                    // Build dirt/blocks upward when low health
-                    if (mob.getHealth() / mob.getMaxHealth() < 0.3f) {
-                        pillarUpEscape();
-                    } else {
-                        mob.getNavigation().moveTo(target, baseSpeed);
+                    if (enableEnvironmentalTactics) {
+                        // Build dirt/blocks upward when low health
+                        if (mob.getHealth() / mob.getMaxHealth() < 0.3f) {
+                            pillarUpEscape();
+                        }
                     }
+                    mob.getNavigation().moveTo(target, baseSpeed);
                     break;
                     
                 case "use_terrain":
-                    // Climb walls, swim strategically
-                    if (mob instanceof net.minecraft.world.entity.monster.Spider) {
-                        // Spiders climb to vantage points
-                        climbToAdvantage();
+                    if (enableEnvironmentalTactics) {
+                        // Climb walls, swim strategically
+                        if (mob instanceof net.minecraft.world.entity.monster.Spider) {
+                            // Spiders climb to vantage points
+                            climbToAdvantage();
+                        }
                     }
                     mob.getNavigation().moveTo(target, baseSpeed * 1.1);
                     break;
                     
                 case "block_path":
-                    // Place blocks to obstruct player
-                    if (distance > 3.0 && distance < 8.0) {
-                        blockPlayerPath();
+                    if (enableEnvironmentalTactics) {
+                        // Place blocks to obstruct player
+                        if (distance > 3.0 && distance < 8.0) {
+                            blockPlayerPath();
+                        }
                     }
                     mob.getNavigation().moveTo(target, baseSpeed);
                     break;
