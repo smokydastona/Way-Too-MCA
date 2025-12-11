@@ -12,20 +12,21 @@ import java.util.concurrent.*;
  * Federated Learning System - Syncs learned knowledge via Cloudflare Worker API
  * allowing all servers to benefit from collective learning with zero configuration.
  * 
- * CRITICAL: CURRENTLY DISABLED - Implementation incomplete
- * Will throw exceptions if used. Needs proper Cloudflare Worker deployment.
+ * ✅ ENABLED: Cloudflare Worker deployed and operational
  * 
- * Features (when implemented):
+ * Features:
  * - Automatic sync to Cloudflare Worker API (no Git required)
  * - Privacy-safe aggregation (no player identifiable data)
  * - Works out-of-the-box for all players (no SSH/credentials needed)
  * - Async operations (non-blocking gameplay)
  * - Graceful degradation if API unavailable
+ * 
+ * Worker URL: https://mca-ai-tactics-api.mc-ai-datcol.workers.dev
  */
 public class FederatedLearning {
     private static final Logger LOGGER = LogUtils.getLogger();
     
-    private static final boolean FEATURE_ENABLED = false; // CRITICAL: Disabled until Cloudflare Worker deployed
+    private static final boolean FEATURE_ENABLED = true; // ✅ ENABLED - Cloudflare Worker deployed
     
     // Sync Configuration
     private static final long SYNC_INTERVAL_MS = 300_000; // 5 minutes (submit)
@@ -68,9 +69,9 @@ public class FederatedLearning {
     private long lastPullTime = 0;
     
     public FederatedLearning(Path localDataPath, String apiEndpoint) {
-        // CRITICAL: Feature disabled until proper implementation
+        // Check if feature is enabled globally
         if (!FEATURE_ENABLED) {
-            LOGGER.warn("Federated Learning is disabled - feature incomplete");
+            LOGGER.info("Federated Learning is disabled via feature flag");
             this.syncEnabled = false;
             return;
         }
