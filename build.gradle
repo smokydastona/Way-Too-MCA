@@ -87,8 +87,8 @@ dependencies {
         compileOnly fg.deobf(files(file))
     }
     
-    // FastUtil - High-performance collections (20-40% faster than Java collections)
-    jarJar(group: 'it.unimi.dsi', name: 'fastutil', version: '[8.5.0,8.6.0)')
+    // FastUtil - High-performance collections
+    // NOT bundled due to Sinytra Connector Jar-in-Jar conflicts
     implementation 'it.unimi.dsi:fastutil:8.5.12'
     
     // Deep Java Library (DJL) for ML inference - ALL runtime dependencies
