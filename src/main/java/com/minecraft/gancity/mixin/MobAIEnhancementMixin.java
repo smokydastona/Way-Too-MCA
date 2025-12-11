@@ -7,6 +7,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.monster.*;
+import net.minecraftforge.fml.ModList;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -17,19 +18,35 @@ import java.util.EnumSet;
 /**
  * Mixin to enhance mob AI with adaptive behavior
  * Modifies attack patterns based on AI decisions
+ * 
+ * Compatibility:
+ * - Ice and Fire: Skips dragons and mythical creatures (complex custom AI)
  */
 @Mixin(Mob.class)
 public abstract class MobAIEnhancementMixin {
+    
+    // Ice and Fire compatibility check
+    private static final boolean ICE_AND_FIRE_LOADED = ModList.get().isLoaded("iceandfire");
     
     /**
      * Inject AI-enhanced behavior when mob registers goals
      * Now applies to ALL mobs, not just monsters - passive mobs learn evasion
      * MCA ENHANCED: MCA villagers get unique persistent tactical profiles
      * VANILLA ENHANCED: Vanilla villagers also get persistent profiles!
+     * 
+     * Compatibility: Skips Ice and Fire mobs (they have complex custom AI)
      */
     @Inject(method = "registerGoals", at = @At("TAIL"))
     private void onRegisterGoals(CallbackInfo ci) {
         Mob mob = (Mob)(Object)this;
+        
+        // Ice and Fire compatibility - skip their mobs entirely
+        if (ICE_AND_FIRE_LOADED) {
+            String entityId = mob.getType().toString();
+            if (entityId.contains("iceandfire:")) {
+                return; // Don't modify Ice and Fire entity AI
+            }
+        }
         
         // Check if this is ANY villager (MCA or vanilla)
         String className = mob.getClass().getName();

@@ -16,6 +16,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 
@@ -27,14 +28,38 @@ import java.util.Random;
 /**
  * Assigns tactic tiers to mobs on spawn
  * Creates natural difficulty variation with elite, veteran, and rookie mobs
+ * 
+ * Compatibility:
+ * - Ice and Fire: Skips dragons and mythical creatures (they have custom AI)
+ * - PMMO: Reduces stat modifiers to avoid conflicts with PMMO scaling
+ * - Livestock/Pet Overhaul: Skips animals (not hostile mobs)
  */
 @Mod.EventBusSubscriber(modid = GANCityMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class MobTierAssignmentHandler {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Random RANDOM = new Random();
     
+    // Mod compatibility detection
+    private static final boolean ICE_AND_FIRE_LOADED = ModList.get().isLoaded("iceandfire");
+    private static final boolean PMMO_LOADED = ModList.get().isLoaded("pmmo");
+    private static final boolean LIVESTOCK_OVERHAUL_LOADED = ModList.get().isLoaded("livestock_overhaul");
+    private static final boolean PET_OVERHAUL_LOADED = ModList.get().isLoaded("petoverhaul");
+    
     private static final String TIER_TAG = "AdaptiveMobAI_Tier";
     private static final String TIER_ASSIGNED_TAG = "AdaptiveMobAI_TierAssigned";
+    
+    // Log compatibility status on first access
+    static {
+        if (ICE_AND_FIRE_LOADED) {
+            LOGGER.info("[Tier System] Ice and Fire detected - skipping dragons and mythical creatures");
+        }
+        if (PMMO_LOADED) {
+            LOGGER.info("[Tier System] PMMO detected - reducing stat modifiers to avoid conflicts");
+        }
+        if (LIVESTOCK_OVERHAUL_LOADED || PET_OVERHAUL_LOADED) {
+            LOGGER.info("[Tier System] Animal overhaul mod detected - skipping non-hostile entities");
+        }
+    }
     
     /**
      * Assign tactic tier when mob spawns
@@ -90,18 +115,51 @@ public class MobTierAssignmentHandler {
     
     /**
      * Check if mob type is supported by adaptive AI
-     * Now supports ALL hostile mobs
+     * Now supports ALL hostile mobs, with compatibility checks for other mods
      */
     private static boolean isSupportedMob(Entity entity) {
-        // Support all Enemy type mobs (hostile mobs)
-        return entity instanceof Enemy;
+        // Only support Enemy type mobs (hostile mobs)
+        if (!(entity instanceof Enemy)) {
+            return false;
+        }
+        
+        // Ice and Fire compatibility - skip dragons and mythical creatures
+        if (ICE_AND_FIRE_LOADED) {
+            String entityId = entity.getType().toString();
+            // Skip Ice and Fire entities (they have complex custom AI)
+            if (entityId.contains("iceandfire:")) {
+                return false;
+            }
+        }
+        
+        // Livestock/Pet Overhaul compatibility - these mods only affect animals, not hostile mobs
+        // No additional checks needed since we already filter for Enemy type
+        
+        return true;
     }
     
     /**
      * Apply stat modifiers based on tier
+     * PMMO compatibility: Reduce multipliers when PMMO is loaded to avoid conflicts
      */
     private static void applyTierModifiers(Mob mob, TacticTier tier) {
         float multiplier = tier.getDifficultyMultiplier();
+        
+        // PMMO compatibility - reduce our stat modifiers to avoid stacking conflicts
+        float healthMultiplier = 1.2f;
+        float speedMultiplier = 1.1f;
+        float weakHealthMultiplier = 0.8f;
+        float weakSpeedMultiplier = 0.9f;
+        
+        if (PMMO_LOADED) {
+            // Reduce modifiers by half when PMMO is present
+            healthMultiplier = 1.1f;      // 20% -> 10%
+            speedMultiplier = 1.05f;      // 10% -> 5%
+            weakHealthMultiplier = 0.9f;  // -20% -> -10%
+            weakSpeedMultiplier = 0.95f;  // -10% -> -5%
+            
+            LOGGER.debug("[Tier System] PMMO compatibility: Using reduced stat modifiers");
+        }
         
         // Get base stats for logging
         float originalMaxHealth = mob.getMaxHealth();
@@ -109,14 +167,14 @@ public class MobTierAssignmentHandler {
         
         // Elite mobs are tougher
         if (tier == TacticTier.ELITE) {
-            // 20% more max health (must set attribute, not just current health)
-            float newMaxHealth = originalMaxHealth * 1.2f;
+            // More max health (scaled based on PMMO presence)
+            float newMaxHealth = originalMaxHealth * healthMultiplier;
             mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH)
                 .setBaseValue(newMaxHealth);
             mob.setHealth(newMaxHealth);
             
-            // 10% faster movement
-            float newSpeed = originalSpeed * 1.1f;
+            // Faster movement (scaled based on PMMO presence)
+            float newSpeed = originalSpeed * speedMultiplier;
             mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
                 .setBaseValue(newSpeed);
             
@@ -127,14 +185,14 @@ public class MobTierAssignmentHandler {
         }
         // Rookie mobs are weaker
         else if (tier == TacticTier.ROOKIE) {
-            // 20% less max health
-            float newMaxHealth = originalMaxHealth * 0.8f;
+            // Less max health (scaled based on PMMO presence)
+            float newMaxHealth = originalMaxHealth * weakHealthMultiplier;
             mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH)
                 .setBaseValue(newMaxHealth);
             mob.setHealth(newMaxHealth);
             
-            // 10% slower movement
-            float newSpeed = originalSpeed * 0.9f;
+            // Slower movement (scaled based on PMMO presence)
+            float newSpeed = originalSpeed * weakSpeedMultiplier;
             mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)
                 .setBaseValue(newSpeed);
             
