@@ -58,6 +58,7 @@ public class MobBehaviorAI {
     private static final int STRUCTURE_SEARCH_RADIUS = 64;
     
     private boolean mlEnabled = true;  // Always enabled; uses rule-based fallback until DJL initializes
+    private boolean initializationAttempted = false;  // Track if we've tried loading DJL
     private final Map<String, MobBehaviorProfile> behaviorProfiles = new HashMap<>();
     private final Map<String, MobState> lastStateCache = new HashMap<>();
     private final Map<String, String> lastActionCache = new HashMap<>();
