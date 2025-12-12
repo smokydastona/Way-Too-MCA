@@ -5,7 +5,18 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
-version = project.hasProperty('mod_version') ? project.mod_version : '1.0.0'
+// Auto-increment version on every build
+def versionFile = file('gradle.properties')
+def props = new Properties()
+versionFile.withInputStream { props.load(it) }
+def currentVersion = props.getProperty('mod_version')
+def parts = currentVersion.tokenize('.')
+def newPatch = parts[2].toInteger() + 1
+def newVersion = "${parts[0]}.${parts[1]}.${newPatch}"
+props.setProperty('mod_version', newVersion)
+versionFile.withOutputStream { props.store(it, null) }
+
+version = newVersion
 group = 'com.minecraft.gancity'
 
 base {
