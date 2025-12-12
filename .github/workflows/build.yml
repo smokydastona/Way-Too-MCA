@@ -51,20 +51,42 @@ jobs:
     - name: List build artifacts
       run: ls -la build/libs/
     
-    - name: Upload Adaptive-Mob-Ai JAR
+    - name: Upload Core Mod JAR
       uses: actions/upload-artifact@v4
       with:
         name: Adaptive-Mob-Ai-${{ steps.version.outputs.VERSION }}
-        path: build/libs/Adaptive-Mob-Ai-*.jar
+        path: build/libs/Adaptive-Mob-Ai-${{ steps.version.outputs.VERSION }}.jar
+        retention-days: 90
+    
+    - name: Upload ML Libraries JAR
+      uses: actions/upload-artifact@v4
+      with:
+        name: Adaptive-Mob-Ai-ML-Libraries-${{ steps.version.outputs.VERSION }}
+        path: build/libs/Adaptive-Mob-Ai-ML-Libraries-${{ steps.version.outputs.VERSION }}.jar
         retention-days: 90
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v1
       with:
-        files: build/libs/*.jar
+        files: |
+          build/libs/Adaptive-Mob-Ai-${{ steps.version.outputs.VERSION }}.jar
+          build/libs/Adaptive-Mob-Ai-ML-Libraries-${{ steps.version.outputs.VERSION }}.jar
         generate_release_notes: true
         draft: false
         prerelease: false
+        body: |
+          ## Installation Options
+          
+          ### 🧠 Full ML Features (Recommended)
+          Download **both** JARs and place in `mods/` folder:
+          - `Adaptive-Mob-Ai-${{ steps.version.outputs.VERSION }}.jar` (~500KB - core mod)
+          - `Adaptive-Mob-Ai-ML-Libraries-${{ steps.version.outputs.VERSION }}.jar` (~50MB - neural network libraries)
+          
+          ### ⚡ Lightweight Rule-Based AI
+          Download **only** the core mod JAR:
+          - `Adaptive-Mob-Ai-${{ steps.version.outputs.VERSION }}.jar`
+          
+          Mobs will use advanced rule-based AI without neural networks. You can add the ML Libraries JAR later to enable true machine learning.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

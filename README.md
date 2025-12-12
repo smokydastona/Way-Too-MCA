@@ -40,9 +40,22 @@ A Minecraft 1.20.1 Forge mod that uses **actual machine learning** to make ALL v
 - Java 17
 
 ### Installation
-1. Download latest JAR from releases
+
+#### Option 1: Full ML Features (Recommended)
+1. Download **both** JARs from releases:
+   - `Adaptive-Mob-Ai-{version}.jar` (~500KB - core mod)
+   - `Adaptive-Mob-Ai-ML-Libraries-{version}.jar` (~50MB - neural network libraries)
+2. Place **both** JARs in `mods/` folder
+3. Launch Minecraft with Forge
+4. Mobs will use real neural networks for learning
+
+#### Option 2: Lightweight Rule-Based AI
+1. Download **only** `Adaptive-Mob-Ai-{version}.jar`
 2. Place in `mods/` folder
 3. Launch Minecraft with Forge
+4. Mobs will use advanced rule-based AI (no neural network)
+
+> **Note**: The ML Libraries JAR contains DJL (Deep Java Library) and PyTorch. If you only want to try the mod without the large download, use Option 2 first. You can add the ML Libraries JAR later to enable true machine learning.
 
 ### Testing
 ```
@@ -97,9 +110,14 @@ ALL mobs use a **neural network** trained via **reinforcement learning**:
 
 ### Build
 ```bash
-.\gradlew build          # Output: build/libs/mca-ai-enhanced-1.0.0.jar
+.\gradlew build          # Creates TWO JARs in build/libs/:
+                         # 1. Adaptive-Mob-Ai-{version}.jar (~500KB)
+                         # 2. Adaptive-Mob-Ai-ML-Libraries-{version}.jar (~50MB)
+
 .\gradlew runClient      # Test in development environment
 ```
+
+> **Build Output**: The build process creates both JARs automatically. Distribute both for full ML features, or just the main JAR for rule-based AI.
 
 ## Configuration
 

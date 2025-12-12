@@ -74,7 +74,10 @@ repositories {
 
 // Configuration for optional ML libraries JAR
 configurations {
-    mlLibs
+    mlLibs {
+        canBeResolved = true
+        canBeConsumed = false
+    }
 }
 
 dependencies {
@@ -91,14 +94,21 @@ dependencies {
     // NOT bundled due to Sinytra Connector Jar-in-Jar conflicts
     implementation 'it.unimi.dsi:fastutil:8.5.12'
     
-    // Deep Java Library (DJL) for ML inference - ALL runtime dependencies
-    // NOT bundled to avoid Jar-in-Jar conflicts with Sinytra Connector
-    // Forge will automatically download from Maven Central on first use
-    implementation 'ai.djl:api:0.25.0'
-    implementation 'ai.djl:basicdataset:0.25.0'
-    runtimeOnly 'ai.djl.pytorch:pytorch-engine:0.25.0'
-    runtimeOnly 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
-    runtimeOnly 'ai.djl.huggingface:tokenizers:0.25.0'
+    // Deep Java Library (DJL) for ML inference
+    // These are COMPILE-ONLY in main mod - not bundled!
+    // User downloads separate ML-Libraries JAR if they want ML features
+    compileOnly 'ai.djl:api:0.25.0'
+    compileOnly 'ai.djl:basicdataset:0.25.0'
+    compileOnly 'ai.djl.pytorch:pytorch-engine:0.25.0'
+    compileOnly 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
+    compileOnly 'ai.djl.huggingface:tokenizers:0.25.0'
+    
+    // ML libraries configuration - bundled in separate JAR
+    mlLibs 'ai.djl:api:0.25.0'
+    mlLibs 'ai.djl:basicdataset:0.25.0'
+    mlLibs 'ai.djl.pytorch:pytorch-engine:0.25.0'
+    mlLibs 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
+    mlLibs 'ai.djl.huggingface:tokenizers:0.25.0'
 }
 
 // Configure the regular jar task with the new name
@@ -106,29 +116,61 @@ tasks.named('jar', Jar).configure {
     archiveBaseName = 'Adaptive-Mob-Ai'
 }
 
-// Configure jarJar to be the final output with bundled libraries
+// Create separate ML Libraries JAR (optional download)
+tasks.register('mlLibrariesJar', Jar) {
+    archiveBaseName = 'Adaptive-Mob-Ai-ML-Libraries'
+    archiveVersion = project.version
+    
+    // Handle duplicate files from multiple JARs
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    from {
+        configurations.mlLibs.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    // Exclude signatures to avoid conflicts
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    
+    manifest {
+        attributes([
+                'Specification-Title'     : 'Adaptive Mob AI - ML Libraries',
+                'Specification-Vendor'    : 'Adaptive Mob AI Team',
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : 'DJL PyTorch Bundle',
+                'Implementation-Version'  : project.version,
+                'Implementation-Vendor'   : 'Deep Java Library',
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'FMLModType'              : 'LIBRARY'
+        ])
+    }
+}
+
+// Configure jarJar to be the final output WITHOUT DJL (lightweight)
 tasks.named('jarJar').configure {
     archiveBaseName = 'Adaptive-Mob-Ai'
     
-    // Enable jarJar to actually bundle the dependencies
+    // Enable jarJar to actually bundle the dependencies (FastUtil only, NOT DJL)
     jarJar.enable()
     
     manifest {
         attributes([
-                'Specification-Title'     : 'Minecraft GAN City Generator',
-                'Specification-Vendor'    : 'GAN City Team',
+                'Specification-Title'     : 'Adaptive Mob AI',
+                'Specification-Vendor'    : 'Adaptive Mob AI Team',
                 'Specification-Version'   : '1',
                 'Implementation-Title'    : 'Adaptive-Mob-Ai',
                 'Implementation-Version'  : project.version,
-                'Implementation-Vendor'   : 'GAN City Team',
+                'Implementation-Vendor'   : 'Adaptive Mob AI Team',
                 'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
 }
 
-// Make build task depend on jarJar to ensure it's created
+// Make build task create both JARs
 tasks.named('build').configure {
     dependsOn 'jarJar'
+    dependsOn 'mlLibrariesJar'
 }
 
 publishing {
