@@ -196,7 +196,7 @@ None! Server-only design avoids client-side conflicts.
 4. Reduce `maxObjectPoolSize`
 
 ### Lag/Low TPS
-1. Check `/mcaai stats` for bottlenecks
+1. Check `/amai stats` for bottlenecks
 2. Increase `visualCacheDuration`
 3. Enable `lazyInit`
 4. Reduce active mob count

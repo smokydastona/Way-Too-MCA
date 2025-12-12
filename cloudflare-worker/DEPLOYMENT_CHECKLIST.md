@@ -102,7 +102,7 @@ Expected: `version: "2.0.0"`, `features: ["meta-learning", "sequence-patterns"]`
 
 - [ ] **Test in-game**
   - [ ] Start Minecraft with mod
-  - [ ] Run `/amai state` - should show ML enabled
+  - [ ] Run `/amai info` - should show ML enabled
   - [ ] After combat, check logs for "Submitting tactics to Cloudflare"
   - [ ] Run `/amai stats` - should show federated submissions count
 

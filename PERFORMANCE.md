@@ -216,11 +216,10 @@ cacheEvictionFreq = 1000
 
 ## Monitoring & Debugging
 
-### New Commands
+### Commands
 ```
-/mcaai cache       # View cache statistics
-/mcaai memory      # Memory usage breakdown
-/mcaai performance # Performance metrics
+/amai stats        # View AI statistics and performance
+/amai info         # Show mod status
 ```
 
 ### Log Output

@@ -283,16 +283,14 @@ mutationRate = 0.15
 
 ### Chat Commands
 ```
-/mcaai stats
-Shows: Gen #, Stage, Replay size, Teams, Best genome fitness
+/amai stats
+Shows: ML training progress, replay buffer size, active features
 
-/mcaai mlinfo
-Detailed breakdown of each ML system status
+/amai info
+Detailed breakdown of mod features and ML system status
 
-/mcaai genetic
-View top 5 genomes and their traits
-
-/mcaai curriculum
+/amai compat
+View mod compatibility report
 Current stage and action availability
 ```
 
@@ -370,7 +368,7 @@ Critical settings in each ML class:
 
 ### Debugging Tips
 1. Enable verbose logging in mod config
-2. Use `/mcaai stats` frequently during testing
+2. Use `/amai stats` frequently during testing
 3. Check `logs/latest.log` for ML events
 4. Monitor memory with JVM flags: `-Xmx2G -Xms1G`
 5. Test single systems at a time via config toggles

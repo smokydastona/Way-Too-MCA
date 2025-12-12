@@ -57,12 +57,6 @@ A Minecraft 1.20.1 Forge mod that uses **actual machine learning** to make ALL v
 
 > **Note**: The ML Libraries JAR contains DJL (Deep Java Library) and PyTorch. If you only want to try the mod without the large download, use Option 2 first. You can add the ML Libraries JAR later to enable true machine learning.
 
-### Testing
-```
-/mcaai stats    - View ML training progress
-/mcaai info     - Show mod features
-```
-
 ## How It Works
 
 ALL mobs use a **neural network** trained via **reinforcement learning**:

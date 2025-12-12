@@ -218,7 +218,7 @@ Required on Server:
 - FTB Teams (if used)
 
 Optional on Client:
-- MCA AI Enhanced (for /mcaai commands)
+- MCA AI Enhanced (for /amai commands)
 - MCA Reborn (for dialogue UI)
 ```
 
@@ -241,7 +241,7 @@ Optional on Client:
 
 ## 🔍 In-Game Compatibility Check
 
-Use `/mcaai compat` to see real-time compatibility status:
+Use `/amai compat` to see real-time compatibility status:
 
 ```
 §b=== Mod Compatibility Report ===§r
@@ -271,7 +271,7 @@ Use `/mcaai compat` to see real-time compatibility status:
 
 If you find a mod that conflicts or doesn't integrate properly:
 
-1. Check `/mcaai compat` in-game
+1. Check `/amai compat` in-game
 2. Review `logs/latest.log` for errors
 3. Report on GitHub Issues with:
    - Mod list

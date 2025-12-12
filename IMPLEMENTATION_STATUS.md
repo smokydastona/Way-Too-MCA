@@ -74,9 +74,10 @@
 - ✅ **Mod Compatibility System** - ModCompatibility, CuriosIntegration, FTBTeamsIntegration
 
 ### Commands
-- ✅ `/mcaai stats` - View ML training progress, generations, replay buffer
-- ✅ `/mcaai info` - Show mod features and status
-- ✅ `/mcaai test dialogue <type>` - Test dialogue generation
+- ✅ `/amai stats` - View ML training progress, generations, replay buffer
+- ✅ `/amai info` - Show mod features and status
+- ✅ `/amai compat` - View mod compatibility report
+- ✅ `/amai test dialogue <type>` - Test dialogue generation
 
 ## ⚠️ **PARTIALLY IMPLEMENTED**
 
