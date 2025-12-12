@@ -29,18 +29,14 @@ jobs:
     - name: Get version number
       id: version
       run: |
-        if [[ $GITHUB_REF == refs/tags/v* ]]; then
-          VERSION=${GITHUB_REF#refs/tags/v}
-        else
-          VERSION="1.0.${{ github.run_number }}"
-        fi
+        # Read version from gradle.properties instead of auto-generating
+        VERSION=$(grep "mod_version=" gradle.properties | cut -d'=' -f2)
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "Building version: $VERSION"
     
-    - name: Update version in gradle.properties
+    - name: Verify version
       run: |
-        sed -i "s/mod_version=.*/mod_version=${{ steps.version.outputs.VERSION }}/" gradle.properties
-        cat gradle.properties
+        echo "Using version from gradle.properties: ${{ steps.version.outputs.VERSION }}"
     
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew

@@ -21,7 +21,6 @@ public class GANCityCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("amai")
-            .requires(source -> source.hasPermission(2))
             .then(Commands.literal("test")
                 .then(Commands.literal("dialogue")
                     .then(Commands.argument("type", StringArgumentType.word())
