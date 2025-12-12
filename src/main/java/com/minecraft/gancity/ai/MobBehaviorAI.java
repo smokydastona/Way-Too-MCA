@@ -57,7 +57,7 @@ public class MobBehaviorAI {
     private static final float END_DIFFICULTY_MULT = 2.0f;
     private static final int STRUCTURE_SEARCH_RADIUS = 64;
     
-    private boolean mlEnabled = false;
+    private boolean mlEnabled = true;  // Always enabled; uses rule-based fallback until DJL initializes
     private final Map<String, MobBehaviorProfile> behaviorProfiles = new HashMap<>();
     private final Map<String, MobState> lastStateCache = new HashMap<>();
     private final Map<String, String> lastActionCache = new HashMap<>();
@@ -129,7 +129,6 @@ public class MobBehaviorAI {
             // Load saved models if available
             modelPersistence.loadAll(doubleDQN, replayBuffer, tacticKnowledgeBase);
             
-            mlEnabled = true;
             String mlSystems = buildMLSystemsString();
             LOGGER.info("Advanced ML systems initialized - {}", mlSystems);
         } catch (ClassNotFoundException e) {
@@ -1457,8 +1456,12 @@ public class MobBehaviorAI {
      * Get ML statistics for debugging/display
      */
     public String getMLStats() {
-        if (!mlEnabled || doubleDQN == null) {
-            return "ML disabled - using rule-based AI";
+        if (!mlEnabled) {
+            return "ML initialization failed - using rule-based AI only";
+        }
+        
+        if (doubleDQN == null) {
+            return "ML enabled - initializing neural networks (DJL libraries loading...)";
         }
         
         String perfStats = performanceOptimizer != null ? performanceOptimizer.getPerformanceStats() : "No perf data";
