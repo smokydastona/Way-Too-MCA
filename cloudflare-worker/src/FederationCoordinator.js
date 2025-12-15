@@ -52,6 +52,15 @@ export class FederationCoordinator {
     if (path === '/coordinator/heartbeat' && request.method === 'POST') {
       return await this.handleHeartbeat(request);
     }
+    
+    // Tier progression routes
+    if (path === '/coordinator/tiers/upload' && request.method === 'POST') {
+      return await this.handleTierUpload(request);
+    }
+    
+    if (path === '/coordinator/tiers/download' && request.method === 'GET') {
+      return await this.handleTierDownload(request);
+    }
 
     return new Response('Not Found', { status: 404 });
   }
@@ -449,4 +458,84 @@ export class FederationCoordinator {
     await this.state.storage.put('globalModel', this.globalModel);
     await this.state.storage.put('lastAggregation', this.lastAggregation);
   }
+  
+  // ==================== TIER PROGRESSION ENDPOINTS (HNN-INSPIRED) ====================
+  
+  /**
+   * Handle tier data upload
+   */
+  async handleTierUpload(request) {
+    try {
+      const data = await request.json();
+      const { experience, tiers } = data;
+      
+      if (!experience || !tiers) {
+        return new Response(JSON.stringify({ error: 'Missing tier data' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // Get current tier data
+      let globalTierData = await this.state.storage.get('tierData') || { experience: {}, tiers: {} };
+      
+      // Merge experience (keep maximum for each mob type)
+      for (const [mobType, exp] of Object.entries(experience)) {
+        const currentExp = globalTierData.experience[mobType] || 0;
+        if (exp > currentExp) {
+          globalTierData.experience[mobType] = exp;
+          globalTierData.tiers[mobType] = tiers[mobType] || 'UNTRAINED';
+        }
+      }
+      
+      // Save updated tier data
+      await this.state.storage.put('tierData', globalTierData);
+      
+      console.log(`📊 Tier data updated: ${Object.keys(experience).length} mob types`);
+      
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Tier data updated'
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+    } catch (error) {
+      console.error('Tier upload error:', error);
+      return new Response(JSON.stringify({
+        error: 'Failed to process tier data',
+        message: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+  
+  /**
+   * Handle tier data download
+   */
+  async handleTierDownload(request) {
+    try {
+      const tierData = await this.state.storage.get('tierData') || { experience: {}, tiers: {} };
+      
+      return new Response(JSON.stringify(tierData), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+    } catch (error) {
+      console.error('Tier download error:', error);
+      return new Response(JSON.stringify({
+        error: 'Failed to retrieve tier data',
+        message: error.message
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+  
+  // ==================== END TIER PROGRESSION ENDPOINTS ====================
 }

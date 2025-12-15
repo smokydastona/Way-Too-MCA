@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.mojang.logging.LogUtils;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.slf4j.Logger;
@@ -13,6 +15,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.*;
 
 /**
@@ -812,5 +815,90 @@ public class CloudflareAPIClient {
         }
         return false;
     }
+    
+    // ==================== TIER PROGRESSION ENDPOINTS (HNN-INSPIRED) ====================
+    
+    /**
+     * Submit tier progression data to Cloudflare
+     * Stores AI tier experience data for federation sync
+     */
+    public boolean submitTierData(Map<String, Object> tierData) {
+        try {
+            JsonObject payload = new JsonObject();
+            
+            // Add experience map
+            if (tierData.containsKey("experience")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Integer> expData = (Map<String, Integer>) tierData.get("experience");
+                JsonObject expJson = new JsonObject();
+                for (Map.Entry<String, Integer> entry : expData.entrySet()) {
+                    expJson.addProperty(entry.getKey(), entry.getValue());
+                }
+                payload.add("experience", expJson);
+            }
+            
+            // Add tier names
+            if (tierData.containsKey("tiers")) {
+                @SuppressWarnings("unchecked")
+                Map<String, String> tiersData = (Map<String, String>) tierData.get("tiers");
+                JsonObject tiersJson = new JsonObject();
+                for (Map.Entry<String, String> entry : tiersData.entrySet()) {
+                    tiersJson.addProperty(entry.getKey(), entry.getValue());
+                }
+                payload.add("tiers", tiersJson);
+            }
+            
+            String response = sendPostRequest("api/tiers", payload.toString());
+            return response != null && !response.isEmpty();
+            
+        } catch (Exception e) {
+            LOGGER.warn("Failed to submit tier data: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Download tier progression data from Cloudflare
+     * Returns aggregated tier experience from all servers
+     */
+    public Map<String, Object> downloadTierData() {
+        try {
+            String response = sendGetRequest("api/tiers");
+            if (response == null || response.isEmpty()) {
+                return new HashMap<>();
+            }
+            
+            JsonObject json = JsonParser.parseString(response).getAsJsonObject();
+            Map<String, Object> result = new HashMap<>();
+            
+            // Parse experience data
+            if (json.has("experience")) {
+                JsonObject expJson = json.getAsJsonObject("experience");
+                Map<String, Integer> expMap = new HashMap<>();
+                for (Map.Entry<String, JsonElement> entry : expJson.entrySet()) {
+                    expMap.put(entry.getKey(), entry.getValue().getAsInt());
+                }
+                result.put("experience", expMap);
+            }
+            
+            // Parse tier names
+            if (json.has("tiers")) {
+                JsonObject tiersJson = json.getAsJsonObject("tiers");
+                Map<String, String> tiersMap = new HashMap<>();
+                for (Map.Entry<String, JsonElement> entry : tiersJson.entrySet()) {
+                    tiersMap.put(entry.getKey(), entry.getValue().getAsString());
+                }
+                result.put("tiers", tiersMap);
+            }
+            
+            return result;
+            
+        } catch (Exception e) {
+            LOGGER.warn("Failed to download tier data: {}", e.getMessage());
+            return new HashMap<>();
+        }
+    }
+    
+    // ==================== END TIER PROGRESSION ENDPOINTS ====================
 }
 

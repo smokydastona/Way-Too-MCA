@@ -239,10 +239,35 @@ export default {
         }
       }
 
+      // Tier progression endpoints (HNN-inspired)
+      if (url.pathname === '/api/tiers' && request.method === 'POST') {
+        const coordinatorId = env.FEDERATION_COORDINATOR.idFromName('global');
+        const coordinator = env.FEDERATION_COORDINATOR.get(coordinatorId);
+        
+        const coordinatorReq = new Request('https://coordinator/coordinator/tiers/upload', {
+          method: 'POST',
+          body: await request.text(),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        return await coordinator.fetch(coordinatorReq);
+      }
+      
+      if (url.pathname === '/api/tiers' && request.method === 'GET') {
+        const coordinatorId = env.FEDERATION_COORDINATOR.idFromName('global');
+        const coordinator = env.FEDERATION_COORDINATOR.get(coordinatorId);
+        
+        const coordinatorReq = new Request('https://coordinator/coordinator/tiers/download', {
+          method: 'GET'
+        });
+        
+        return await coordinator.fetch(coordinatorReq);
+      }
+
       // 404 for unknown paths
       return new Response(JSON.stringify({
         error: 'Not Found',
-        availableEndpoints: ['/health', '/status', '/api/upload', '/api/global', '/api/heartbeat']
+        availableEndpoints: ['/health', '/status', '/api/upload', '/api/global', '/api/heartbeat', '/api/tiers']
       }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

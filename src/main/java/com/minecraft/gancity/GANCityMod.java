@@ -229,6 +229,12 @@ public class GANCityMod {
             String apiEndpoint = "";
             String apiKey = "";
             
+            // HNN-inspired tier progression config
+            boolean tierProgressionEnabled = true;
+            boolean visualTierIndicators = true;
+            float expRateMultiplier = 1.0f;
+            boolean syncTiersWithFederation = true;
+            
             for (String line : lines) {
                 line = line.trim();
                 if (line.contains("enableFederatedLearning") && line.contains("true")) {
@@ -248,6 +254,21 @@ public class GANCityMod {
                     if (parts.length > 1) {
                         apiKey = parts[1].trim().replace("\"", "").replace("'", "");
                     }
+                } else if (line.contains("enableTierProgression") && line.contains("false")) {
+                    tierProgressionEnabled = false;
+                } else if (line.contains("enableVisualTierIndicators") && line.contains("false")) {
+                    visualTierIndicators = false;
+                } else if (line.contains("experienceRateMultiplier")) {
+                    String[] parts = line.split("=");
+                    if (parts.length > 1) {
+                        try {
+                            expRateMultiplier = Float.parseFloat(parts[1].trim());
+                        } catch (NumberFormatException e) {
+                            LOGGER.warn("Invalid experienceRateMultiplier in config, using default 1.0");
+                        }
+                    }
+                } else if (line.contains("syncTiersWithFederation") && line.contains("false")) {
+                    syncTiersWithFederation = false;
                 }
             }
             
@@ -277,6 +298,22 @@ public class GANCityMod {
                 LOGGER.info("✓ Federated learning enabled - Global AI knowledge sharing active!");
             } else {
                 LOGGER.info("Federated learning disabled in config");
+            }
+            
+            // Configure HNN-inspired tier progression system
+            LOGGER.info("Configuring AI tier progression system...");
+            MobBehaviorAI ai = getMobBehaviorAI();
+            ai.setTierSystemEnabled(tierProgressionEnabled);
+            ai.setVisualTierIndicators(visualTierIndicators);
+            
+            if (tierProgressionEnabled) {
+                LOGGER.info("✓ AI Tier Progression ENABLED");
+                LOGGER.info("  Visual Indicators: {}", visualTierIndicators ? "ON" : "OFF");
+                LOGGER.info("  Experience Rate: {}x", expRateMultiplier);
+                LOGGER.info("  Federation Sync: {}", syncTiersWithFederation ? "ON" : "OFF");
+                LOGGER.info("  Tiers: UNTRAINED → LEARNING → TRAINED → EXPERT → MASTER");
+            } else {
+                LOGGER.info("✗ AI Tier Progression DISABLED - All mobs use baseline difficulty");
             }
             
         } catch (Exception e) {

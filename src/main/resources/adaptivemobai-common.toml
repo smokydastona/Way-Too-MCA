@@ -116,6 +116,34 @@
 	#Creates dynamic gameplay where AI difficulty scales with risk/reward
 	enableContextualDifficulty = true
 
+[tier_progression]
+	# === HNN-Inspired AI Tier Progression ===
+	# Mobs gain experience from combat and progress through intelligence tiers
+	# UNTRAINED → LEARNING → TRAINED → EXPERT → MASTER
+	# Higher tiers = better tactics, faster thinking, fewer mistakes
+	
+	#Enable tier progression system (mobs get smarter over time)
+	#When true: Mobs level up intelligence through combat experience
+	#When false: All mobs use baseline difficulty
+	enableTierProgression = true
+	
+	#Enable visual tier indicators (colored particles)
+	#When true: Shows particle effects for TRAINED+ mobs
+	#When false: No visual indicators (cleaner look)
+	enableVisualTierIndicators = true
+	
+	#Experience rate multiplier (affects how fast mobs level up)
+	#1.0 = Normal progression (1000 exp for MASTER)
+	#2.0 = Fast progression (500 exp for MASTER)
+	#0.5 = Slow progression (2000 exp for MASTER)
+	#Range: 0.1 ~ 5.0
+	experienceRateMultiplier = 1.0
+	
+	#Sync tier data with federation (share experience globally)
+	#When true: Mobs learn from ALL servers' combat experience
+	#When false: Only local server experience counts
+	syncTiersWithFederation = true
+
 [tactic_tiers]
 	# === Tactic Tier System ===
 	# Mobs spawn with ELITE, VETERAN, or ROOKIE tiers for combat variety

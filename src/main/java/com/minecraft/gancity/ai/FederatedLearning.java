@@ -905,5 +905,45 @@ public class FederatedLearning {
         
         return apiClient.getCoordinatorStatus();
     }
+    
+    // ==================== TIER PROGRESSION SYNC (HNN-INSPIRED) ====================
+    
+    /**
+     * Submit tier progression data to federation
+     * Called when mobs tier up to share experience across servers
+     */
+    public void submitTierData(Map<String, Object> tierData) {
+        if (!syncEnabled || tierData == null || tierData.isEmpty()) {
+            return;
+        }
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                LOGGER.debug("Submitting tier progression data to federation");
+                apiClient.submitTierData(tierData);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to submit tier data: {}", e.getMessage());
+            }
+        }, apiClient.executor);
+    }
+    
+    /**
+     * Download tier progression data from federation
+     * Merges with local tier data (keeps maximum experience)
+     */
+    public Map<String, Object> downloadTierData() {
+        if (!syncEnabled) {
+            return new HashMap<>();
+        }
+        
+        try {
+            return apiClient.downloadTierData();
+        } catch (Exception e) {
+            LOGGER.warn("Failed to download tier data: {}", e.getMessage());
+            return new HashMap<>();
+        }
+    }
+    
+    // ==================== END TIER PROGRESSION SYNC ====================
 }
 

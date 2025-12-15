@@ -87,9 +87,122 @@ public class MobBehaviorAI {
     private long lastMetaLearningUpdate = 0;
     private static final long META_LEARNING_CACHE_TTL = 300000;  // 5 minutes
 
+    // HNN-inspired tiered progression system
+    private final Map<String, Integer> globalCombatExperience = new HashMap<>();  // Total exp per mob type
+    private final Map<String, AITier> mobTypeTiers = new HashMap<>();  // Current tier per mob type
+    private boolean tierSystemEnabled = true;
+    private boolean visualTierIndicatorsEnabled = true;
+    
+    // Variant family grouping (cross-learning within families)
+    private static final Map<String, List<String>> VARIANT_FAMILIES = new HashMap<>();
+    static {
+        VARIANT_FAMILIES.put("zombie", Arrays.asList("zombie", "husk", "drowned", "zombie_villager"));
+        VARIANT_FAMILIES.put("skeleton", Arrays.asList("skeleton", "stray", "wither_skeleton"));
+        VARIANT_FAMILIES.put("spider", Arrays.asList("spider", "cave_spider"));
+        VARIANT_FAMILIES.put("guardian", Arrays.asList("guardian", "elder_guardian"));
+        VARIANT_FAMILIES.put("piglin", Arrays.asList("piglin", "piglin_brute", "zombified_piglin"));
+        VARIANT_FAMILIES.put("enderman", Arrays.asList("enderman"));
+        VARIANT_FAMILIES.put("creeper", Arrays.asList("creeper"));
+        VARIANT_FAMILIES.put("witch", Arrays.asList("witch"));
+        VARIANT_FAMILIES.put("blaze", Arrays.asList("blaze"));
+        VARIANT_FAMILIES.put("ghast", Arrays.asList("ghast"));
+        VARIANT_FAMILIES.put("slime", Arrays.asList("slime", "magma_cube"));
+        VARIANT_FAMILIES.put("golem", Arrays.asList("iron_golem", "snow_golem"));
+    }
+    
+    // Dynamic think costs per mob type
+    private static final Map<String, Integer> BASE_THINK_COSTS = new HashMap<>();
+    static {
+        // Simple melee mobs think faster
+        BASE_THINK_COSTS.put("zombie", 15);
+        BASE_THINK_COSTS.put("husk", 15);
+        BASE_THINK_COSTS.put("drowned", 18);
+        BASE_THINK_COSTS.put("zombie_villager", 15);
+        
+        // Ranged mobs need more computation
+        BASE_THINK_COSTS.put("skeleton", 20);
+        BASE_THINK_COSTS.put("stray", 20);
+        BASE_THINK_COSTS.put("wither_skeleton", 18);
+        BASE_THINK_COSTS.put("blaze", 22);
+        BASE_THINK_COSTS.put("ghast", 25);
+        
+        // Reactive/teleporting mobs think very fast
+        BASE_THINK_COSTS.put("enderman", 10);
+        BASE_THINK_COSTS.put("shulker", 12);
+        
+        // Stealth/ambush mobs
+        BASE_THINK_COSTS.put("creeper", 12);
+        BASE_THINK_COSTS.put("spider", 14);
+        BASE_THINK_COSTS.put("cave_spider", 14);
+        
+        // Boss mobs are computationally expensive
+        BASE_THINK_COSTS.put("wither", 30);
+        BASE_THINK_COSTS.put("ender_dragon", 35);
+        BASE_THINK_COSTS.put("warden", 25);
+        
+        // Default for unlisted mobs
+        BASE_THINK_COSTS.put("default", 15);
+    }
+
     public MobBehaviorAI() {
         initializeDefaultProfiles();
         // Don't initialize ML systems at startup - lazy load when needed
+    }
+    
+    /**
+     * AI Tier system inspired by Hostile Neural Networks
+     * Mobs progress through tiers based on accumulated combat experience
+     */
+    public enum AITier {
+        UNTRAINED(0, 1, 0.30f, "gray", 1.0f),       // Just spawned, makes many mistakes
+        LEARNING(50, 2, 0.50f, "white", 0.9f),      // Basic tactics, learning
+        TRAINED(200, 3, 0.70f, "green", 0.8f),      // Competent, reliable tactics
+        EXPERT(500, 4, 0.85f, "blue", 0.7f),        // Skilled, few mistakes
+        MASTER(1000, 5, 0.95f, "purple", 0.6f);     // Maximum AI, nearly perfect
+        
+        public final int requiredExp;      // Total combat experience needed
+        public final int expPerCombat;     // Experience gained per combat at this tier
+        public final float accuracy;       // Success rate of tactic selection (0.0-1.0)
+        public final String color;         // Display color for visual indicators
+        public final float thinkCostMult;  // Multiplier for think interval (smarter = faster)
+        
+        AITier(int requiredExp, int expPerCombat, float accuracy, String color, float thinkCostMult) {
+            this.requiredExp = requiredExp;
+            this.expPerCombat = expPerCombat;
+            this.accuracy = accuracy;
+            this.color = color;
+            this.thinkCostMult = thinkCostMult;
+        }
+        
+        /**
+         * Get tier from total experience
+         */
+        public static AITier fromExperience(int exp) {
+            AITier[] tiers = AITier.values();
+            for (int i = tiers.length - 1; i >= 0; i--) {
+                if (exp >= tiers[i].requiredExp) {
+                    return tiers[i];
+                }
+            }
+            return UNTRAINED;
+        }
+        
+        /**
+         * Get next tier, or null if at max
+         */
+        public AITier getNext() {
+            int nextOrdinal = this.ordinal() + 1;
+            AITier[] tiers = AITier.values();
+            return nextOrdinal < tiers.length ? tiers[nextOrdinal] : null;
+        }
+        
+        /**
+         * Get experience needed for next tier
+         */
+        public int getExpToNextTier(int currentExp) {
+            AITier next = getNext();
+            return next != null ? next.requiredExp - currentExp : 0;
+        }
     }
     
     /**
@@ -853,9 +966,12 @@ public class MobBehaviorAI {
      */
     public String selectMobAction(String mobType, MobState state, String mobId, Player target) {
         // CRITICAL FIX #5: Limit action frequency - don't think every tick
+        // Use dynamic think interval based on mob type and tier
         globalTick++;
+        int thinkInterval = tierSystemEnabled ? getThinkInterval(mobType) : THINK_INTERVAL;
+        
         Integer lastThink = mobLastThinkTick.get(mobId);
-        if (lastThink != null && (globalTick - lastThink) < THINK_INTERVAL) {
+        if (lastThink != null && (globalTick - lastThink) < thinkInterval) {
             // Use last action - don't compute new one yet
             String cached = lastActionCache.get(mobId);
             return cached != null ? cached : "default_attack";
@@ -896,6 +1012,24 @@ public class MobBehaviorAI {
         } else {
             // Use rule-based system
             selectedAction = selectActionRuleBased(profile, state);
+        }
+        
+        // HNN-inspired accuracy check: Lower tiers make mistakes
+        if (tierSystemEnabled) {
+            AITier tier = getMobTier(mobType);
+            
+            // Accuracy check: chance the AI successfully executes its best tactic
+            if (random.nextFloat() > tier.accuracy) {
+                // Failed accuracy check - use a random/fallback action instead
+                List<String> actions = profile.getActions();
+                selectedAction = actions.get(random.nextInt(actions.size()));
+                
+                // Log occasionally for debugging (1% chance)
+                if (random.nextFloat() < 0.01f) {
+                    LOGGER.debug("{} ({}) accuracy check failed - using random action instead", 
+                        mobType, tier);
+                }
+            }
         }
         
         // Cache state and action for learning when outcome is recorded
@@ -1309,13 +1443,21 @@ public class MobBehaviorAI {
             return;  // No cached data for this mob
         }
         
+        // Extract mob type from mobId (format: "mobType_uuid")
+        String mobType = getMobTypeFromId(mobId);
+        
         // Calculate reward based on outcome
         float reward = calculateReward(initialState, finalState, playerDied, mobDied);
         reward += damageDealt * 0.5f - damageTaken * 0.3f;  // Fine-grained feedback
         
+        // HNN-inspired: Record combat experience for tier progression
+        if (tierSystemEnabled && mobType != null) {
+            boolean wasSuccessful = (reward > 0) || playerDied || (damageDealt > damageTaken);
+            recordCombatExperience(mobType, wasSuccessful);
+        }
+        
         // REVOLUTIONARY: Huge bonus for successfully using borrowed tactics from other mob types
         if (crossMobLearningEnabled && federatedLearning != null) {
-            String mobType = getMobTypeFromId(mobId);
             if (mobType != null && !isMobsNativeAction(mobType, action)) {
                 // This mob used a tactic it borrowed from another species!
                 float originalReward = reward;
@@ -1369,8 +1511,7 @@ public class MobBehaviorAI {
             replayBuffer.add(initialFeatures, actionIndex, reward, finalFeatures, episodeDone);
             
             // Train XGBoost if available (fast, incremental)
-            if (xgboost != null && xgboost.isAvailable()) {
-                String mobType = "unknown"; // Extract from mobId or state if needed
+            if (xgboost != null && xgboost.isAvailable() && mobType != null) {
                 xgboost.recordOutcome(mobType, initialFeatures, actionIndex, reward > 0);
             }
             
@@ -1428,6 +1569,188 @@ public class MobBehaviorAI {
     public void recordCombatOutcome(String mobId, boolean playerDied, boolean mobDied, MobState finalState) {
         recordCombatOutcome(mobId, playerDied, mobDied, finalState, 0.0f, 0.0f, null);
     }
+    
+    // ==================== TIER PROGRESSION SYSTEM (HNN-INSPIRED) ====================
+    
+    /**
+     * Record combat experience and update AI tier
+     * Called after every combat encounter to track mob learning progression
+     * 
+     * @param mobType The mob type (e.g., "zombie", "skeleton")
+     * @param wasSuccessful Whether the mob achieved its goal (damaged player, killed player, etc.)
+     */
+    public void recordCombatExperience(String mobType, boolean wasSuccessful) {
+        if (!tierSystemEnabled) {
+            return;
+        }
+        
+        // Normalize mob type to family base (e.g., "drowned" -> "zombie")
+        String familyBase = getFamilyBase(mobType);
+        
+        // Get current experience and tier
+        int currentExp = globalCombatExperience.getOrDefault(familyBase, 0);
+        AITier currentTier = AITier.fromExperience(currentExp);
+        
+        // Award experience based on current tier and success
+        int expGain = currentTier.expPerCombat;
+        if (wasSuccessful) {
+            expGain = (int)(expGain * 1.5f);  // Bonus for successful tactics
+        }
+        
+        // Update experience
+        int newExp = currentExp + expGain;
+        globalCombatExperience.put(familyBase, newExp);
+        
+        // Check for tier progression
+        AITier newTier = AITier.fromExperience(newExp);
+        if (newTier != currentTier) {
+            mobTypeTiers.put(familyBase, newTier);
+            LOGGER.info("✨ {} AI TIER UP: {} → {} ({} total experience)", 
+                familyBase.toUpperCase(), currentTier, newTier, newExp);
+            
+            // Share experience across variant family (cross-learning)
+            if (crossMobLearningEnabled) {
+                shareExperienceWithFamily(familyBase, expGain / 2);  // Half exp to variants
+            }
+        }
+    }
+    
+    /**
+     * Get the family base type for a mob (e.g., "drowned" -> "zombie")
+     */
+    private String getFamilyBase(String mobType) {
+        for (Map.Entry<String, List<String>> family : VARIANT_FAMILIES.entrySet()) {
+            if (family.getValue().contains(mobType)) {
+                return family.getKey();
+            }
+        }
+        return mobType;  // Not in a family, use as-is
+    }
+    
+    /**
+     * Share experience with variant family members
+     */
+    private void shareExperienceWithFamily(String familyBase, int expToShare) {
+        List<String> familyMembers = VARIANT_FAMILIES.get(familyBase);
+        if (familyMembers == null || familyMembers.size() <= 1) {
+            return;
+        }
+        
+        for (String variant : familyMembers) {
+            if (!variant.equals(familyBase)) {
+                int currentExp = globalCombatExperience.getOrDefault(variant, 0);
+                globalCombatExperience.put(variant, currentExp + expToShare);
+            }
+        }
+    }
+    
+    /**
+     * Get current AI tier for a mob type
+     */
+    public AITier getMobTier(String mobType) {
+        if (!tierSystemEnabled) {
+            return AITier.TRAINED;  // Default to middle tier if system disabled
+        }
+        
+        String familyBase = getFamilyBase(mobType);
+        
+        // Check cache first
+        if (mobTypeTiers.containsKey(familyBase)) {
+            return mobTypeTiers.get(familyBase);
+        }
+        
+        // Calculate from experience
+        int exp = globalCombatExperience.getOrDefault(familyBase, 0);
+        AITier tier = AITier.fromExperience(exp);
+        mobTypeTiers.put(familyBase, tier);
+        return tier;
+    }
+    
+    /**
+     * Get total combat experience for a mob type
+     */
+    public int getCombatExperience(String mobType) {
+        String familyBase = getFamilyBase(mobType);
+        return globalCombatExperience.getOrDefault(familyBase, 0);
+    }
+    
+    /**
+     * Get dynamic think interval based on mob type and tier
+     * Smarter mobs think faster, complex mobs think slower
+     */
+    public int getThinkInterval(String mobType) {
+        int baseCost = BASE_THINK_COSTS.getOrDefault(mobType, BASE_THINK_COSTS.get("default"));
+        
+        if (tierSystemEnabled) {
+            AITier tier = getMobTier(mobType);
+            // Higher tier = faster thinking (lower interval)
+            return (int)(baseCost * tier.thinkCostMult);
+        }
+        
+        return baseCost;
+    }
+    
+    /**
+     * Set tier system enabled/disabled
+     */
+    public void setTierSystemEnabled(boolean enabled) {
+        this.tierSystemEnabled = enabled;
+        LOGGER.info("AI Tier Progression System: {}", enabled ? "ENABLED" : "DISABLED");
+    }
+    
+    /**
+     * Set visual tier indicators enabled/disabled
+     */
+    public void setVisualTierIndicators(boolean enabled) {
+        this.visualTierIndicatorsEnabled = enabled;
+    }
+    
+    /**
+     * Check if visual tier indicators are enabled
+     */
+    public boolean areVisualTierIndicatorsEnabled() {
+        return visualTierIndicatorsEnabled;
+    }
+    
+    /**
+     * Get all tier data for federation sync
+     */
+    public Map<String, Object> getTierDataForSync() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("experience", new HashMap<>(globalCombatExperience));
+        
+        Map<String, String> tierNames = new HashMap<>();
+        for (Map.Entry<String, AITier> entry : mobTypeTiers.entrySet()) {
+            tierNames.put(entry.getKey(), entry.getValue().name());
+        }
+        data.put("tiers", tierNames);
+        
+        return data;
+    }
+    
+    /**
+     * Load tier data from federation sync
+     */
+    public void loadTierDataFromSync(Map<String, Object> data) {
+        if (data.containsKey("experience")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Integer> expData = (Map<String, Integer>) data.get("experience");
+            
+            // Merge experience data (take maximum)
+            for (Map.Entry<String, Integer> entry : expData.entrySet()) {
+                int currentExp = globalCombatExperience.getOrDefault(entry.getKey(), 0);
+                if (entry.getValue() > currentExp) {
+                    globalCombatExperience.put(entry.getKey(), entry.getValue());
+                    
+                    // Recalculate tier
+                    AITier newTier = AITier.fromExperience(entry.getValue());
+                    mobTypeTiers.put(entry.getKey(), newTier);
+                }
+            }
+        }
+    }
+    
+    // ==================== END TIER PROGRESSION SYSTEM ====================
     
     /**
      * Calculate reward for reinforcement learning
