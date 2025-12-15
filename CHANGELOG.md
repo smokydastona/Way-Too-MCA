@@ -2,6 +2,47 @@
 
 All notable changes to MCA AI Enhanced will be documented in this file.
 
+## [1.1.17] - 2025-12-15
+
+### Added
+- **AI Tier Progression System** (Inspired by Hostile Neural Networks)
+  - 5-tier intelligence system: UNTRAINED → LEARNING → TRAINED → EXPERT → MASTER
+  - Mobs gain combat experience and level up their AI over time
+  - Experience persists across mob deaths (global per-mob-type tracking)
+  - Accuracy-based decision making (30% → 95% tactical success rate)
+  - Dynamic think intervals (smarter mobs react faster)
+  - Visual tier indicators with colored particles (green/blue/purple)
+  - Tier-up celebration effects with enchantment glints
+  - Federation sync for tier data (servers share AI progression globally)
+  - Configuration options: `enableTierProgression`, `visualTierIndicators`, `experienceRateMultiplier`
+
+- **Variant Family Grouping System**
+  - 12 mob families for cross-learning (zombie family, skeleton family, etc.)
+  - Variant mobs share 50% experience with family members
+  - Drowned learns from zombies, stray learns from skeletons, etc.
+
+- **Mob-Specific Think Costs**
+  - Base intervals per mob type (zombies: 15t, skeletons: 20t, bosses: 30t)
+  - Tier-based speed modifiers (MASTER mobs think 40% faster)
+  - Performance optimized for complex mob AI
+
+- **Cloudflare Worker Tier Endpoints**
+  - `/api/tiers` POST/GET for tier data upload/download
+  - FederationCoordinator stores global tier progression in Durable Object
+  - Merge strategy: keeps maximum experience per mob type
+
+### Changed
+- AI decision making now includes accuracy checks (lower tiers make tactical mistakes)
+- Think intervals now dynamic based on mob type and intelligence tier
+- Experience system tracks total combat outcomes per mob type globally
+
+### Technical
+- New `AITier` enum with 5 progression levels and tier metadata
+- `TierVisualIndicators` utility class for particle effects
+- Tier data sync methods in `FederatedLearning` and `CloudflareAPIClient`
+- Config loading enhanced to read tier progression settings
+- All systems maintain full backwards compatibility
+
 ## [1.1.13] - 2025-12-14
 
 ### Fixed
