@@ -59,6 +59,9 @@ public class FederatedLearning {
     // Local aggregation before submission
     private final Map<String, TacticSubmission> pendingSubmissions = new ConcurrentHashMap<>();
     
+    // Track first encounters for bootstrap uploads
+    private final java.util.Set<String> firstEncounters = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    
     // Global tactic pool - tactics learned by ALL mob types worldwide
     private final Map<String, Map<String, GlobalTactic>> globalTacticPool = new ConcurrentHashMap<>();
     
@@ -133,6 +136,30 @@ public class FederatedLearning {
         
         submission.addOutcome(reward, success);
         totalDataPointsContributed++;
+        
+        // FIX: First-encounter upload (bootstrap)
+        if (firstEncounters.add(mobType)) {
+            LOGGER.info("🚀 FIRST ENCOUNTER: {} - uploading bootstrap data", mobType);
+            syncExecutor.submit(() -> {
+                try {
+                    boolean uploaded = apiClient.submitTactic(
+                        mobType,
+                        action,
+                        reward,
+                        success ? "success" : "failure",
+                        success ? 1.0f : 0.0f,
+                        true  // bootstrap flag
+                    );
+                    if (uploaded) {
+                        LOGGER.info("✅ Bootstrap upload successful for {}", mobType);
+                    } else {
+                        LOGGER.warn("❌ Bootstrap upload failed for {}", mobType);
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("Bootstrap upload error: {}", e.getMessage());
+                }
+            });
+        }
     }
     
     /**
@@ -271,6 +298,16 @@ public class FederatedLearning {
             
             LOGGER.info("💓 HEARTBEAT SYNC - Pending: {}, Last sync: {}min ago", 
                 pendingCount, (currentTime - lastSyncTime) / 60_000);
+            
+            // Send heartbeat with active mob types
+            java.util.List<String> activeMobs = new java.util.ArrayList<>(firstEncounters);
+            boolean heartbeatSuccess = apiClient.sendHeartbeat(activeMobs);
+            
+            if (heartbeatSuccess) {
+                LOGGER.debug("💓 Heartbeat sent ({} active mobs)", activeMobs.size());
+            } else {
+                LOGGER.warn("💔 Heartbeat failed");
+            }
             
             // If we have pending data, upload it
             if (!pendingSubmissions.isEmpty()) {
@@ -839,4 +876,16 @@ public class FederatedLearning {
         
         return apiClient.downloadMetaLearningRecommendations();
     }
+    
+    /**
+     * Get coordinator status (for /amai status command)
+     */
+    public Map<String, Object> getCoordinatorStatus() {
+        if (!syncEnabled || apiClient == null) {
+            return null;
+        }
+        
+        return apiClient.getCoordinatorStatus();
+    }
 }
+

@@ -1674,6 +1674,10 @@ public class MobBehaviorAI {
         return modelPersistence;
     }
     
+    public FederatedLearning getFederatedLearning() {
+        return federatedLearning;
+    }
+    
     // ==================== Cross-Mob Learning Helper Methods ====================
     
     /**

@@ -3,6 +3,7 @@ package com.minecraft.gancity.ai;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.logging.LogUtils;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.slf4j.Logger;
@@ -98,6 +99,14 @@ public class CloudflareAPIClient {
      * @param winRate Win rate (0.0-1.0) used to determine tier
      */
     public boolean submitTactic(String mobType, String action, float reward, String outcome, float winRate) {
+        return submitTactic(mobType, action, reward, outcome, winRate, false);
+    }
+    
+    /**
+     * Submit a learned tactic with bootstrap flag
+     * @param bootstrap If true, this is a first-encounter upload (bypasses round restrictions)
+     */
+    public boolean submitTactic(String mobType, String action, float reward, String outcome, float winRate, boolean bootstrap) {
         try {
             // Mark as dirty for potential batching
             dirtyTracker.markDirty(mobType, action);
@@ -117,24 +126,37 @@ public class CloudflareAPIClient {
             payload.addProperty("serverId", serverId); // Unique server ID for conflict detection
             payload.addProperty("sampleCount", 1); // Number of samples (for weighted averaging)
             payload.addProperty("mergeStrategy", "weighted_average"); // How to handle conflicts
+            if (bootstrap) {
+                payload.addProperty("bootstrap", true); // First-encounter upload flag
+            }
             
-            String jsonPayload = gson.toJson(payload);
+            // Build tactics object for coordinator
+            JsonObject tactics = new JsonObject();
+            JsonObject actionData = new JsonObject();
+            actionData.addProperty("avgReward", reward);
+            actionData.addProperty("count", 1);
+            actionData.addProperty("successCount", outcome.equals("success") ? 1 : 0);
+            actionData.addProperty("successRate", winRate);
+            tactics.add(action, actionData);
+            
+            JsonObject coordinatorPayload = new JsonObject();
+            coordinatorPayload.addProperty("serverId", serverId);
+            coordinatorPayload.addProperty("mobType", mobType);
+            coordinatorPayload.add("tactics", tactics);
+            if (bootstrap) {
+                coordinatorPayload.addProperty("bootstrap", true);
+            }
+            
+            String jsonPayload = gson.toJson(coordinatorPayload);
             
             // Try GZIP compression if data is large enough
             byte[] compressed = CompressionUtil.compress(jsonPayload);
             String response;
             
-            if (compressed != null) {
-                // Send compressed data
-                response = sendCompressedPostRequest("api/submit-tactics", compressed);
-                compressionBytesSaved += (jsonPayload.getBytes(StandardCharsets.UTF_8).length - compressed.length);
-                LOGGER.debug("Submitted compressed tactic: {} - {} ({} bytes saved)", 
-                    mobType, action, jsonPayload.length() - compressed.length);
-            } else {
-                // Send uncompressed
-                response = sendPostRequest("api/submit-tactics", jsonPayload);
-                LOGGER.debug("Submitted tactic: {} - {} (reward: {})", mobType, action, reward);
-            }
+            // Use new coordinator endpoint
+            response = sendPostRequest("api/upload", jsonPayload);
+            LOGGER.debug("Submitted tactic to coordinator: {} - {} (reward: {}, bootstrap: {})", 
+                mobType, action, reward, bootstrap);
             
             if (response != null) {
                 totalSubmissions++;
@@ -720,4 +742,75 @@ public class CloudflareAPIClient {
         
         return result;
     }
+    
+    /**
+     * Send heartbeat to coordinator (keep-alive)
+     * Required every 5-10 minutes to maintain active contributor status
+     */
+    public boolean sendHeartbeat(java.util.List<String> activeMobs) {
+        try {
+            JsonObject payload = new JsonObject();
+            payload.addProperty("serverId", serverId);
+            
+            com.google.gson.JsonArray mobsArray = new com.google.gson.JsonArray();
+            for (String mobType : activeMobs) {
+                mobsArray.add(mobType);
+            }
+            payload.add("activeMobs", mobsArray);
+            
+            String response = sendPostRequest("api/heartbeat", gson.toJson(payload));
+            if (response != null) {
+                LOGGER.debug("Heartbeat sent successfully ({} active mobs)", activeMobs.size());
+                return true;
+            }
+            return false;
+            
+        } catch (Exception e) {
+            LOGGER.warn("Failed to send heartbeat: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Get coordinator status (round, contributors, etc.)
+     */
+    public Map<String, Object> getCoordinatorStatus() {
+        try {
+            String response = sendGetRequest("status");
+            if (response != null) {
+                JsonObject json = JsonParser.parseString(response).getAsJsonObject();
+                
+                Map<String, Object> status = new java.util.HashMap<>();
+                status.put("round", json.has("round") ? json.get("round").getAsInt() : 0);
+                status.put("contributors", json.has("contributors") ? json.get("contributors").getAsInt() : 0);
+                status.put("modelsInRound", json.has("modelsInCurrentRound") ? json.get("modelsInCurrentRound").getAsInt() : 0);
+                status.put("lastAggregation", json.has("lastAggregation") ? json.get("lastAggregation").getAsString() : "unknown");
+                status.put("hasGlobalModel", json.has("hasGlobalModel") ? json.get("hasGlobalModel").getAsBoolean() : false);
+                
+                return status;
+            }
+            
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get coordinator status: {}", e.getMessage());
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Check if worker is healthy
+     */
+    public boolean isHealthy() {
+        try {
+            String response = sendGetRequest("health");
+            if (response != null) {
+                JsonObject json = JsonParser.parseString(response).getAsJsonObject();
+                return json.has("status") && "healthy".equals(json.get("status").getAsString());
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Health check failed: {}", e.getMessage());
+        }
+        return false;
+    }
 }
+

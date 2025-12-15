@@ -31,6 +31,8 @@ public class GANCityCommand {
                 .executes(GANCityCommand::showInfo))
             .then(Commands.literal("stats")
                 .executes(GANCityCommand::showStats))
+            .then(Commands.literal("status")
+                .executes(GANCityCommand::showFederationStatus))
             .then(Commands.literal("compat")
                 .executes(GANCityCommand::showCompatibility))
         );
@@ -209,6 +211,76 @@ public class GANCityCommand {
             source.sendSuccess(() -> Component.literal("  Personality traits: 7"), false);
             source.sendSuccess(() -> Component.literal("  Mood states: 6"), false);
             source.sendSuccess(() -> Component.literal("  §aGPT-style natural conversations enabled§r"), false);
+        }
+        
+        return 1;
+    }
+    
+    private static int showFederationStatus(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        MobBehaviorAI behaviorAI = GANCityMod.getMobBehaviorAI();
+        
+        source.sendSuccess(() -> Component.literal("§b=== Federated Learning Status ===§r"), false);
+        source.sendSuccess(() -> Component.literal(""), false);
+        
+        if (behaviorAI != null && behaviorAI.getFederatedLearning() != null) {
+            com.minecraft.gancity.ai.FederatedLearning fl = behaviorAI.getFederatedLearning();
+            
+            // Check if federation is enabled
+            if (!fl.isEnabled()) {
+                source.sendSuccess(() -> Component.literal("  §cFederated Learning: DISABLED§r"), false);
+                source.sendSuccess(() -> Component.literal("  (Enable in config to join global AI network)"), false);
+                return 1;
+            }
+            
+            // Try to get coordinator status
+            source.sendSuccess(() -> Component.literal("  §aFederated Learning: ENABLED§r"), false);
+            source.sendSuccess(() -> Component.literal(""), false);
+            source.sendSuccess(() -> Component.literal("  §eQuerying coordinator...§r"), false);
+            
+            // Async check (don't block command)
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    Map<String, Object> status = fl.getCoordinatorStatus();
+                    
+                    if (status != null) {
+                        int round = (int) status.getOrDefault("round", 0);
+                        int contributors = (int) status.getOrDefault("contributors", 0);
+                        int modelsInRound = (int) status.getOrDefault("modelsInRound", 0);
+                        boolean hasGlobal = (boolean) status.getOrDefault("hasGlobalModel", false);
+                        
+                        source.sendSuccess(() -> Component.literal(String.format(
+                            "  §6Current Round:§r %d", round
+                        )), false);
+                        
+                        source.sendSuccess(() -> Component.literal(String.format(
+                            "  §6Contributors:§r %d servers worldwide", contributors
+                        )), false);
+                        
+                        source.sendSuccess(() -> Component.literal(String.format(
+                            "  §6Models in Round:§r %d pending aggregation", modelsInRound
+                        )), false);
+                        
+                        String globalStatus = hasGlobal ? "§a✓ Available§r" : "§e⏳ Waiting for first aggregation§r";
+                        source.sendSuccess(() -> Component.literal(String.format(
+                            "  §6Global Model:§r %s", globalStatus
+                        )), false);
+                        
+                        source.sendSuccess(() -> Component.literal(""), false);
+                        source.sendSuccess(() -> Component.literal("  §aConnection: HEALTHY§r"), false);
+                        
+                    } else {
+                        source.sendSuccess(() -> Component.literal("  §cConnection: FAILED§r"), false);
+                        source.sendSuccess(() -> Component.literal("  Check logs for details"), false);
+                    }
+                    
+                } catch (Exception e) {
+                    source.sendSuccess(() -> Component.literal("  §cError querying coordinator: " + e.getMessage() + "§r"), false);
+                }
+            });
+            
+        } else {
+            source.sendSuccess(() -> Component.literal("  §cFederated Learning: NOT INITIALIZED§r"), false);
         }
         
         return 1;
