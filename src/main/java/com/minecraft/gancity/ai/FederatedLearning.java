@@ -1,6 +1,7 @@
 package com.minecraft.gancity.ai;
 
 import com.mojang.logging.LogUtils;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.slf4j.Logger;
 
 import java.io.*;
@@ -164,6 +165,7 @@ public class FederatedLearning {
     
     /**
      * Submit accumulated local tactics to Cloudflare API
+     * ⚡ FULLY ASYNC - Never blocks server thread or game ticks
      */
     private void submitLocalTactics() {
         if (!syncEnabled || pendingSubmissions.isEmpty()) return;
@@ -180,24 +182,30 @@ public class FederatedLearning {
             return;
         }
         
-        try {
-            LOGGER.info("Submitting {} local tactics to global repository...", pendingSubmissions.size());
-            
-            int successCount = 0;
-            int failCount = 0;
-            
-            // Submit each pending tactic
-            for (TacticSubmission submission : pendingSubmissions.values()) {
-                boolean success = apiClient.submitTactic(
-                    submission.mobType,
-                    submission.action,
-                    submission.getAverageReward(),
-                    submission.getSuccessRate() > 0.5f ? "success" : "failure",
-                    submission.getSuccessRate()  // Pass win rate for tier calculation
-                );
+        // ⚡ CRITICAL: Copy submissions for async processing (don't block this method)
+        final Map<String, TacticSubmission> submissionsToUpload = new Object2ObjectOpenHashMap<>(pendingSubmissions);
+        final int submissionCount = submissionsToUpload.size();
+        
+        // Fire and forget - submit async on API client's executor
+        CompletableFuture.runAsync(() -> {
+            try {
+                LOGGER.info("Submitting {} local tactics to global repository...", submissionCount);
                 
-                if (success) {
-                    successCount++;
+                int successCount = 0;
+                int failCount = 0;
+                
+                // Submit each pending tactic (happens on background thread)
+                for (TacticSubmission submission : submissionsToUpload.values()) {
+                    boolean success = apiClient.submitTactic(
+                        submission.mobType,
+                        submission.action,
+                        submission.getAverageReward(),
+                        submission.getSuccessRate() > 0.5f ? "success" : "failure",
+                        submission.getSuccessRate()  // Pass win rate for tier calculation
+                    );
+                    
+                    if (success) {
+                        successCount++;
                 } else {
                     failCount++;
                 }
@@ -215,8 +223,9 @@ public class FederatedLearning {
             }
             
         } catch (Exception e) {
-            LOGGER.error("Error submitting tactics: {}", e.getMessage());
+            LOGGER.error("Error submitting tactics (non-critical): {}", e.getMessage());
         }
+    }, apiClient.executor); // ⚡ Use API client's executor for true async
     }
     
     /**
@@ -252,38 +261,42 @@ public class FederatedLearning {
     
     /**
      * ✅ FIX #2: FORCED UPLOAD - Upload immediately with no thresholds
+     * ⚡ FULLY ASYNC - Never blocks
      */
     private void forceUpload() {
         if (!syncEnabled) return;
         
-        try {
-            LOGGER.info("💪 FORCED UPLOAD - Establishing initial connection with server");
-            
-            // If we have pending submissions, upload those
-            if (!pendingSubmissions.isEmpty()) {
-                LOGGER.info("📤 Uploading {} pending tactics", pendingSubmissions.size());
-                for (TacticSubmission submission : pendingSubmissions.values()) {
-                    apiClient.submitTactic(
-                        submission.mobType,
-                        submission.action,
-                        submission.getAverageReward(),
-                        submission.getSuccessRate() > 0.5f ? "success" : "failure",
-                        submission.getSuccessRate()
-                    );
+        // ⚡ ASYNC - Never block, even for forced upload
+        CompletableFuture.runAsync(() -> {
+            try {
+                LOGGER.info("💪 FORCED UPLOAD - Establishing initial connection with server");
+                
+                // If we have pending submissions, upload those
+                if (!pendingSubmissions.isEmpty()) {
+                    LOGGER.info("📤 Uploading {} pending tactics", pendingSubmissions.size());
+                    for (TacticSubmission submission : pendingSubmissions.values()) {
+                        apiClient.submitTactic(
+                            submission.mobType,
+                            submission.action,
+                            submission.getAverageReward(),
+                            submission.getSuccessRate() > 0.5f ? "success" : "failure",
+                            submission.getSuccessRate()
+                        );
+                    }
+                    pendingSubmissions.clear();
+                } else {
+                    // Send a heartbeat ping with dummy data to establish connection
+                    LOGGER.info("📡 Sending heartbeat ping to establish connection");
+                    apiClient.submitTactic("zombie", "heartbeat_init", 0.5f, "success", 0.5f);
                 }
-                pendingSubmissions.clear();
-            } else {
-                // Send a heartbeat ping with dummy data to establish connection
-                LOGGER.info("📡 Sending heartbeat ping to establish connection");
-                apiClient.submitTactic("zombie", "heartbeat_init", 0.5f, "success", 0.5f);
+                
+                lastSyncTime = System.currentTimeMillis();
+                LOGGER.info("✅ Forced upload completed - connection established");
+                
+            } catch (Exception e) {
+                LOGGER.error("❌ Forced upload failed (non-critical): {}", e.getMessage());
             }
-            
-            lastSyncTime = System.currentTimeMillis();
-            LOGGER.info("✅ Forced upload completed - connection established");
-            
-        } catch (Exception e) {
-            LOGGER.error("❌ Forced upload failed: {}", e.getMessage());
-        }
+        }, apiClient.executor); // ⚡ Use API client's executor
     }
     
     /**
@@ -309,15 +322,20 @@ public class FederatedLearning {
                 LOGGER.warn("💔 Heartbeat failed");
             }
             
-            // If we have pending data, upload it
+            // If we have pending data, upload it ASYNC
             if (!pendingSubmissions.isEmpty()) {
-                LOGGER.info("📤 Heartbeat uploading {} tactics", pendingCount);
-                submitLocalTactics();
+                final int finalCount = pendingCount;
+                CompletableFuture.runAsync(() -> {
+                    LOGGER.info("📤 Heartbeat uploading {} tactics", finalCount);
+                    submitLocalTactics();
+                }, apiClient.executor);
             }
             
-            // Always download to check for updates
-            LOGGER.info("📥 Heartbeat checking for global updates");
-            downloadGlobalTactics();
+            // Always download to check for updates ASYNC
+            CompletableFuture.runAsync(() -> {
+                LOGGER.info("📥 Heartbeat checking for global updates");
+                downloadGlobalTactics();
+            }, apiClient.executor);
             
             LOGGER.info("✅ Heartbeat sync completed");
             

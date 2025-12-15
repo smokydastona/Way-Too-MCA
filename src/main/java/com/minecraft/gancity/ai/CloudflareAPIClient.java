@@ -44,7 +44,7 @@ public class CloudflareAPIClient {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     
     // Thread pool for async operations
-    private final ExecutorService executor = Executors.newFixedThreadPool(2, r -> {
+    public final ExecutorService executor = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "CloudflareAPI-Worker");
         t.setDaemon(true);
         return t;
