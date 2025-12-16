@@ -5,11 +5,11 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "adaptivemobai.refmap.json",
   "mixins": [
+    "MobAIEnhancementMixin"
   ],
   "client": [
   ],
   "server": [
-    "MobAIEnhancementMixin"
   ],
   "injectors": {
     "defaultRequire": 1
