@@ -2388,6 +2388,7 @@ public class MobBehaviorAI {
      */
     public void startCombatEpisode(String mobId, String mobType, int currentTick) {
         if (!tacticalSystemEnabled || tacticalAggregator == null) {
+            LOGGER.warn("Tactical system disabled or aggregator null - skipping episode start");
             return;
         }
         
@@ -2396,7 +2397,7 @@ public class MobBehaviorAI {
         activeEpisodes.put(mobId, episode);
         episodeTickCounters.put(mobId, 0);
         
-        LOGGER.debug("Started combat episode for {} ({})", mobType, mobId);
+        LOGGER.info("Started tactical episode for {} ({})", mobType, mobId.substring(0, 8));
     }
     
     /**
@@ -2406,11 +2407,13 @@ public class MobBehaviorAI {
     public void recordTacticalSample(String mobId, net.minecraft.world.entity.Mob mobEntity, 
                                      Player target, float damageThisTick) {
         if (!tacticalSystemEnabled || tacticalAggregator == null) {
+            LOGGER.warn("Tactical system disabled during sample recording");
             return;
         }
         
         CombatEpisode episode = activeEpisodes.get(mobId);
         if (episode == null) {
+            LOGGER.warn("No episode found for {} during sample recording", mobId.substring(0, 8));
             return;  // Episode not started
         }
         
@@ -2433,6 +2436,8 @@ public class MobBehaviorAI {
         
         // Record sample
         episode.recordTacticalSample(state, tacticalAction, damageThisTick);
+        LOGGER.debug("Recorded tactical sample #{} for {} ({})", 
+            episode.getSampleCount(), episode.getMobType(), mobId.substring(0, 8));
     }
     
     /**
@@ -2463,6 +2468,7 @@ public class MobBehaviorAI {
         episodeTickCounters.remove(mobId);
         
         if (episode == null) {
+            LOGGER.warn("No active episode found for {} when ending", mobId.substring(0, 8));
             return;  // No active episode
         }
         
@@ -2472,21 +2478,24 @@ public class MobBehaviorAI {
         );
         
         if (outcome == null) {
+            LOGGER.warn("Episode ended with null outcome for {}", mobId.substring(0, 8));
             return;
         }
         
-        // Log dense episodes
-        if (episode.getSampleCount() >= 20) {
-            LOGGER.info("Dense episode completed: {} samples, reward: {:.1f}, duration: {}s",
-                episode.getSampleCount(), outcome.episodeReward, outcome.durationTicks / 20);
-        }
+        // Log ALL episodes with sample count
+        LOGGER.info("Episode ended: {} samples, reward: {:.1f}, duration: {}s, ready: {}",
+            episode.getSampleCount(), outcome.episodeReward, outcome.durationTicks / 20,
+            episode.isReadyForLearning());
         
         // Aggregate episode into tactical weights
         tacticalAggregator.aggregateEpisode(episode, outcome, playerId != null ? playerId : "server");
         
         // Submit to federation if enabled
         if (federatedLearning != null) {
+            LOGGER.info("Submitting episode to federation...");
             federatedLearning.submitEpisodeAsync(episode, outcome, playerId);
+        } else {
+            LOGGER.warn("Federation learning is null - cannot submit episode");
         }
     }
     

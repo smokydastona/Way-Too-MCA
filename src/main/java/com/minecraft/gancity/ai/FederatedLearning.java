@@ -903,12 +903,16 @@ public class FederatedLearning {
      */
     public void submitEpisodeAsync(CombatEpisode episode, CombatEpisode.EpisodeOutcome outcome, String playerId) {
         if (!syncEnabled || apiClient == null) {
+            LOGGER.warn("Cannot submit episode - sync disabled or apiClient null");
             return;
         }
         
         if (!episode.isReadyForLearning()) {
+            LOGGER.warn("Episode not ready for learning - only {} samples (need 5+)", episode.getSampleCount());
             return;  // Not enough data
         }
+        
+        LOGGER.info("Submitting episode with {} samples to Cloudflare...", episode.getSampleCount());
         
         CompletableFuture.runAsync(() -> {
             try {
@@ -918,10 +922,10 @@ public class FederatedLearning {
                 
                 apiClient.submitEpisodeData(episodeData);
                 
-                LOGGER.debug("Submitted episode: {} samples, reward: {:.1f}", 
+                LOGGER.info("Successfully submitted episode: {} samples, reward: {:.1f}", 
                     episode.getSampleCount(), outcome.episodeReward);
             } catch (Exception e) {
-                LOGGER.warn("Failed to submit episode: {}", e.getMessage());
+                LOGGER.error("Failed to submit episode: {}", e.getMessage(), e);
             }
         }, apiClient.executor);
     }
