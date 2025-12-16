@@ -899,6 +899,119 @@ public class CloudflareAPIClient {
         }
     }
     
+    // ==================== TACTICAL EPISODE FEDERATION ====================
+    
+    /**
+     * Submit combat episode data to Cloudflare
+     * This aggregates high-level tactical patterns, not low-level actions
+     */
+    public void submitEpisodeData(Map<String, Object> episodeData) {
+        try {
+            JsonObject payload = new JsonObject();
+            
+            // Convert episode data to JSON
+            for (Map.Entry<String, Object> entry : episodeData.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+                
+                if (value instanceof String) {
+                    payload.addProperty(key, (String) value);
+                } else if (value instanceof Number) {
+                    payload.addProperty(key, (Number) value);
+                } else if (value instanceof Boolean) {
+                    payload.addProperty(key, (Boolean) value);
+                } else if (value instanceof Map) {
+                    // Nested map (e.g., tacticsUsed)
+                    JsonObject nested = new JsonObject();
+                    for (Map.Entry<?, ?> nestedEntry : ((Map<?, ?>) value).entrySet()) {
+                        if (nestedEntry.getValue() instanceof Number) {
+                            nested.addProperty(nestedEntry.getKey().toString(), (Number) nestedEntry.getValue());
+                        }
+                    }
+                    payload.add(key, nested);
+                }
+            }
+            
+            String response = sendPostRequest("api/episodes", payload.toString());
+            
+            if (response != null) {
+                LOGGER.debug("Episode submitted successfully");
+            }
+            
+        } catch (Exception e) {
+            LOGGER.warn("Failed to submit episode data: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Download tactical weights from Cloudflare
+     * Returns: mobType -> tactic -> weight
+     */
+    public Map<String, Map<String, Float>> downloadTacticalWeights() {
+        try {
+            String response = sendGetRequest("api/tactical-weights");
+            if (response == null || response.isEmpty()) {
+                return new HashMap<>();
+            }
+            
+            JsonObject json = JsonParser.parseString(response).getAsJsonObject();
+            Map<String, Map<String, Float>> weights = new HashMap<>();
+            
+            for (Map.Entry<String, JsonElement> mobEntry : json.entrySet()) {
+                String mobType = mobEntry.getKey();
+                JsonObject tacticsJson = mobEntry.getValue().getAsJsonObject();
+                
+                Map<String, Float> tactics = new HashMap<>();
+                for (Map.Entry<String, JsonElement> tacticEntry : tacticsJson.entrySet()) {
+                    tactics.put(tacticEntry.getKey(), tacticEntry.getValue().getAsFloat());
+                }
+                
+                weights.put(mobType, tactics);
+            }
+            
+            return weights;
+            
+        } catch (Exception e) {
+            LOGGER.warn("Failed to download tactical weights: {}", e.getMessage());
+            return new HashMap<>();
+        }
+    }
+    
+    /**
+     * Get tactical federation statistics
+     * Returns info about episodes aggregated, samples, contributors, etc.
+     */
+    public Map<String, Object> getTacticalStatistics() {
+        try {
+            String response = sendGetRequest("api/tactical-stats");
+            if (response == null || response.isEmpty()) {
+                return new HashMap<>();
+            }
+            
+            JsonObject json = JsonParser.parseString(response).getAsJsonObject();
+            Map<String, Object> stats = new HashMap<>();
+            
+            for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
+                JsonElement value = entry.getValue();
+                if (value.isJsonPrimitive()) {
+                    if (value.getAsJsonPrimitive().isNumber()) {
+                        stats.put(entry.getKey(), value.getAsNumber());
+                    } else if (value.getAsJsonPrimitive().isString()) {
+                        stats.put(entry.getKey(), value.getAsString());
+                    }
+                }
+            }
+            
+            return stats;
+            
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get tactical statistics: {}", e.getMessage());
+            return new HashMap<>();
+        }
+    }
+    
+    // ==================== END TACTICAL EPISODE FEDERATION ====================
+    
     // ==================== END TIER PROGRESSION ENDPOINTS ====================
 }
 

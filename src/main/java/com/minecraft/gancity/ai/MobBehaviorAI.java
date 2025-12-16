@@ -93,6 +93,13 @@ public class MobBehaviorAI {
     private boolean tierSystemEnabled = true;
     private boolean visualTierIndicatorsEnabled = true;
     
+    // TACTICAL SYSTEM - Federation that actually works
+    private TacticalWeightAggregator tacticalAggregator;
+    private final Map<String, CombatEpisode> activeEpisodes = new HashMap<>();  // Track ongoing combat
+    private boolean tacticalSystemEnabled = true;
+    private int episodeSampleInterval = 10;  // Sample tactical state every 10 ticks (0.5s)
+    private final Map<String, Integer> episodeTickCounters = new HashMap<>();  // Track when to sample
+    
     // Variant family grouping (cross-learning within families)
     private static final Map<String, List<String>> VARIANT_FAMILIES = new HashMap<>();
     static {
@@ -283,11 +290,18 @@ public class MobBehaviorAI {
             performanceOptimizer = new PerformanceOptimizer();
             performanceOptimizer.setGlobalModel(doubleDQN);  // Share single model across all mobs
             
+            // TACTICAL SYSTEM: Initialize tactical aggregator
+            tacticalAggregator = new TacticalWeightAggregator();
+            
+            // Seed with heuristic knowledge for cold-start
+            HeuristicTacticSeeding.seedWithDifficulty(tacticalAggregator, difficultyMultiplier);
+            
             // Load saved models if available
             modelPersistence.loadAll(doubleDQN, replayBuffer, tacticKnowledgeBase);
             
             String mlSystems = buildMLSystemsString();
             LOGGER.info("Advanced ML systems initialized - {}", mlSystems);
+            LOGGER.info("Tactical system enabled - mobs will learn high-level combat patterns");
             initializationAttempted = true;
         } catch (ClassNotFoundException e) {
             LOGGER.info("DJL not available, using rule-based AI only (this is normal for development)");
@@ -2360,15 +2374,239 @@ public class MobBehaviorAI {
                 metaLearningCache.clear();
                 metaLearningCache.putAll(newCache);
                 lastMetaLearningUpdate = System.currentTimeMillis();
-                
-                int totalRecs = newCache.values().stream()
-                    .mapToInt(List::size)
-                    .sum();
-                LOGGER.info("Refreshed meta-learning cache: {} recommendations across {} mob types", 
-                    totalRecs, newCache.size());
             }
         } catch (Exception e) {
             LOGGER.warn("Failed to refresh meta-learning cache: {}", e.getMessage());
         }
+    }
+    
+    // ==================== TACTICAL SYSTEM (FEDERATION THAT WORKS) ====================
+    
+    /**
+     * Start combat episode - begin tracking tactical decisions
+     * Call this when mob enters combat with player
+     */
+    public void startCombatEpisode(String mobId, String mobType, int currentTick) {
+        if (!tacticalSystemEnabled || tacticalAggregator == null) {
+            return;
+        }
+        
+        CombatEpisode episode = new CombatEpisode(mobId, mobType);
+        episode.setStartTick(currentTick);
+        activeEpisodes.put(mobId, episode);
+        episodeTickCounters.put(mobId, 0);
+        
+        LOGGER.debug("Started combat episode for {} ({})", mobType, mobId);
+    }
+    
+    /**
+     * Record tactical decision during combat
+     * Call this periodically (every 10 ticks) during combat, NOT every tick
+     */
+    public void recordTacticalSample(String mobId, net.minecraft.world.entity.Mob mobEntity, 
+                                     Player target, float damageThisTick) {
+        if (!tacticalSystemEnabled || tacticalAggregator == null) {
+            return;
+        }
+        
+        CombatEpisode episode = activeEpisodes.get(mobId);
+        if (episode == null) {
+            return;  // Episode not started
+        }
+        
+        // Throttle sampling - only every N ticks
+        int tickCounter = episodeTickCounters.getOrDefault(mobId, 0) + 1;
+        episodeTickCounters.put(mobId, tickCounter);
+        
+        if (tickCounter % episodeSampleInterval != 0) {
+            return;  // Not time to sample yet
+        }
+        
+        // Build tactical state
+        TacticalActionSpace.TacticalState state = 
+            TacticalActionSpace.TacticalState.fromGameState(mobEntity, target);
+        
+        // Get current action (translate from legacy action to tactical)
+        String legacyAction = lastActionCache.get(mobId);
+        TacticalActionSpace.TacticalAction tacticalAction = 
+            translateToTacticalAction(legacyAction, state);
+        
+        // Record sample
+        episode.recordTacticalSample(state, tacticalAction, damageThisTick);
+    }
+    
+    /**
+     * Record damage taken by mob during episode
+     */
+    public void recordEpisodeDamageTaken(String mobId, float damage) {
+        if (!tacticalSystemEnabled) {
+            return;
+        }
+        
+        CombatEpisode episode = activeEpisodes.get(mobId);
+        if (episode != null) {
+            episode.recordDamageTaken(damage);
+        }
+    }
+    
+    /**
+     * End combat episode and aggregate learning
+     * Call this when mob dies or player dies or combat ends
+     */
+    public void endCombatEpisode(String mobId, boolean mobKilledPlayer, boolean playerKilledMob, 
+                                int currentTick, String playerId) {
+        if (!tacticalSystemEnabled || tacticalAggregator == null) {
+            return;
+        }
+        
+        CombatEpisode episode = activeEpisodes.remove(mobId);
+        episodeTickCounters.remove(mobId);
+        
+        if (episode == null) {
+            return;  // No active episode
+        }
+        
+        // Get episode outcome
+        CombatEpisode.EpisodeOutcome outcome = episode.endEpisode(
+            mobKilledPlayer, playerKilledMob, currentTick
+        );
+        
+        if (outcome == null) {
+            return;
+        }
+        
+        // Log dense episodes
+        if (episode.getSampleCount() >= 20) {
+            LOGGER.info("Dense episode completed: {} samples, reward: {:.1f}, duration: {}s",
+                episode.getSampleCount(), outcome.episodeReward, outcome.durationTicks / 20);
+        }
+        
+        // Aggregate episode into tactical weights
+        tacticalAggregator.aggregateEpisode(episode, outcome, playerId != null ? playerId : "server");
+        
+        // Submit to federation if enabled
+        if (federatedLearning != null) {
+            federatedLearning.submitEpisodeAsync(episode, outcome, playerId);
+        }
+    }
+    
+    /**
+     * Select tactical action using aggregated knowledge
+     * This replaces the old DQN forward pass for tactical decision making
+     */
+    public TacticalActionSpace.TacticalAction selectTacticalAction(String mobType, 
+                                                                   TacticalActionSpace.TacticalState state) {
+        if (!tacticalSystemEnabled || tacticalAggregator == null) {
+            // Fallback: random action
+            List<TacticalActionSpace.TacticalAction> available = 
+                TacticalActionSpace.getAvailableActions(mobType);
+            return available.get(random.nextInt(available.size()));
+        }
+        
+        // Get available actions for this mob type
+        List<TacticalActionSpace.TacticalAction> availableActions = 
+            TacticalActionSpace.getAvailableActions(mobType);
+        
+        // Use aggregator to select best tactic
+        return tacticalAggregator.selectTactic(mobType, state, availableActions);
+    }
+    
+    /**
+     * Execute tactical action on mob entity
+     */
+    public void executeTacticalAction(net.minecraft.world.entity.Mob mobEntity, Player target, 
+                                     TacticalActionSpace.TacticalAction action) {
+        TacticalActionSpace.executeTacticalAction(mobEntity, target, action);
+    }
+    
+    /**
+     * Translate legacy action to tactical action (for backward compatibility)
+     */
+    private TacticalActionSpace.TacticalAction translateToTacticalAction(String legacyAction, 
+                                                                         TacticalActionSpace.TacticalState state) {
+        if (legacyAction == null) {
+            return TacticalActionSpace.TacticalAction.DEFAULT_MELEE;
+        }
+        
+        // Map legacy actions to tactical equivalents
+        switch (legacyAction.toLowerCase()) {
+            case "aggressive_chase":
+            case "rush":
+                return TacticalActionSpace.TacticalAction.RUSH_PLAYER;
+                
+            case "circle_strafe":
+            case "flank":
+                return TacticalActionSpace.TacticalAction.STRAFE_AGGRESSIVE;
+                
+            case "retreat":
+            case "flee":
+                return TacticalActionSpace.TacticalAction.RETREAT_AND_HEAL;
+                
+            case "shield_counter":
+                return TacticalActionSpace.TacticalAction.PUNISH_SHIELD_DROP;
+                
+            case "dodge":
+                return TacticalActionSpace.TacticalAction.DODGE_WEAVE;
+                
+            case "group_call":
+                return TacticalActionSpace.TacticalAction.CALL_REINFORCEMENTS;
+                
+            case "feint":
+                return TacticalActionSpace.TacticalAction.FEINT_RETREAT;
+                
+            case "defensive_wait":
+            case "patient":
+                return TacticalActionSpace.TacticalAction.WAIT_FOR_OPENING;
+                
+            default:
+                return TacticalActionSpace.TacticalAction.DEFAULT_MELEE;
+        }
+    }
+    
+    /**
+     * Get tactical aggregator statistics
+     */
+    public Map<String, Object> getTacticalStatistics() {
+        if (tacticalAggregator == null) {
+            return new HashMap<>();
+        }
+        return tacticalAggregator.getStatistics();
+    }
+    
+    /**
+     * Export tactical weights for federation sync
+     */
+    public Map<String, Map<String, Float>> exportTacticalWeights() {
+        if (tacticalAggregator == null) {
+            return new HashMap<>();
+        }
+        return tacticalAggregator.exportWeights();
+    }
+    
+    /**
+     * Import tactical weights from federation
+     */
+    public void importTacticalWeights(Map<String, Map<String, Float>> weights) {
+        if (tacticalAggregator != null && weights != null) {
+            tacticalAggregator.importWeights(weights);
+        }
+    }
+    
+    /**
+     * Enable/disable tactical system
+     */
+    public void setTacticalSystemEnabled(boolean enabled) {
+        this.tacticalSystemEnabled = enabled;
+        if (enabled && tacticalAggregator == null) {
+            tacticalAggregator = new TacticalWeightAggregator();
+            HeuristicTacticSeeding.seedWithDifficulty(tacticalAggregator, difficultyMultiplier);
+        }
+    }
+    
+    /**
+     * Set episode sample interval (how often to sample tactical state)
+     */
+    public void setEpisodeSampleInterval(int ticks) {
+        this.episodeSampleInterval = Math.max(5, Math.min(20, ticks));  // Clamp 5-20 ticks
     }
 }

@@ -895,6 +895,72 @@ public class FederatedLearning {
         return apiClient.downloadMetaLearningRecommendations();
     }
     
+    // ==================== TACTICAL EPISODE FEDERATION ====================
+    
+    /**
+     * Submit a combat episode asynchronously to federation
+     * This is what makes federation actually work - aggregate episodes, not single actions
+     */
+    public void submitEpisodeAsync(CombatEpisode episode, CombatEpisode.EpisodeOutcome outcome, String playerId) {
+        if (!syncEnabled || apiClient == null) {
+            return;
+        }
+        
+        if (!episode.isReadyForLearning()) {
+            return;  // Not enough data
+        }
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                Map<String, Object> episodeData = episode.toFederationData(outcome);
+                episodeData.put("playerId", playerId != null ? playerId : "unknown");
+                episodeData.put("timestamp", System.currentTimeMillis());
+                
+                apiClient.submitEpisodeData(episodeData);
+                
+                LOGGER.debug("Submitted episode: {} samples, reward: {:.1f}", 
+                    episode.getSampleCount(), outcome.episodeReward);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to submit episode: {}", e.getMessage());
+            }
+        }, apiClient.executor);
+    }
+    
+    /**
+     * Download tactical weights from federation
+     * Returns aggregated tactical preferences from all servers
+     */
+    public Map<String, Map<String, Float>> downloadTacticalWeights() {
+        if (!syncEnabled || apiClient == null) {
+            return new HashMap<>();
+        }
+        
+        try {
+            return apiClient.downloadTacticalWeights();
+        } catch (Exception e) {
+            LOGGER.warn("Failed to download tactical weights: {}", e.getMessage());
+            return new HashMap<>();
+        }
+    }
+    
+    /**
+     * Get tactical federation statistics
+     */
+    public Map<String, Object> getTacticalStatistics() {
+        if (!syncEnabled || apiClient == null) {
+            return new HashMap<>();
+        }
+        
+        try {
+            return apiClient.getTacticalStatistics();
+        } catch (Exception e) {
+            LOGGER.warn("Failed to get tactical statistics: {}", e.getMessage());
+            return new HashMap<>();
+        }
+    }
+    
+    // ==================== END TACTICAL EPISODE FEDERATION ====================
+    
     /**
      * Get coordinator status (for /amai status command)
      */
