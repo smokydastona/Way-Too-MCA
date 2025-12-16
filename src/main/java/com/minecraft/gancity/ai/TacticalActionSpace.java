@@ -113,6 +113,12 @@ public class TacticalActionSpace {
          * Build tactical state from Minecraft game state
          */
         public static TacticalState fromGameState(Mob mob, Player target) {
+            // NULL CHECK: Validate inputs
+            if (mob == null || target == null || !mob.isAlive() || !target.isAlive()) {
+                // Return safe default state
+                return new TacticalState(1.0f, 1.0f, 10.0f, false, false, false, 0, 0, false, false, false, false);
+            }
+            
             float healthRatio = mob.getHealth() / mob.getMaxHealth();
             float targetHealthRatio = target.getHealth() / target.getMaxHealth();
             float distance = (float) mob.distanceTo(target);

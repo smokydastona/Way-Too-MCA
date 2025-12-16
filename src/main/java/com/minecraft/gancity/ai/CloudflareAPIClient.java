@@ -50,6 +50,9 @@ public class CloudflareAPIClient {
     public final ExecutorService executor = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "CloudflareAPI-Worker");
         t.setDaemon(true);
+        t.setUncaughtExceptionHandler((thread, throwable) -> {
+            LOGGER.error("Uncaught exception in CloudflareAPI thread: {}", throwable.getMessage());
+        });
         return t;
     });
     

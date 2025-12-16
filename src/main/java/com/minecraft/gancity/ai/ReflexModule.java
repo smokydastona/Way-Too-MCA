@@ -99,19 +99,28 @@ public class ReflexModule {
      * Check if mob should block incoming attack
      */
     public boolean shouldBlock(Mob mob, LivingEntity attacker) {
-        if (attacker == null || !mob.hasLineOfSight(attacker)) {
-            return false;
-        }
-        
-        ReflexState state = getOrCreateState(mob);
-        
-        // Check if in block cooldown
-        if (System.currentTimeMillis() - state.lastBlockTime < BLOCK_WINDOW * 3) {
-            return false;
-        }
-        
-        // Check distance - only block if attacker is close
-        double distance = mob.distanceTo(attacker);
+        try {
+            // NULL CHECK: Validate inputs
+            if (mob == null || attacker == null || !mob.isAlive() || !attacker.isAlive()) {
+                return false;
+            }
+            
+            if (!mob.hasLineOfSight(attacker)) {
+                return false;
+            }
+            
+            ReflexState state = getOrCreateState(mob);
+            if (state == null) {
+                return false;
+            }
+            
+            // Check if in block cooldown
+            if (System.currentTimeMillis() - state.lastBlockTime < BLOCK_WINDOW * 3) {
+                return false;
+            }
+            
+            // Check distance - only block if attacker is close
+            double distance = mob.distanceTo(attacker);
         if (distance > 3.0) {
             return false;
         }
@@ -134,15 +143,24 @@ public class ReflexModule {
         }
         
         return success;
+        } catch (Exception e) {
+            return false; // Safe fallback on any exception
+        }
     }
     
     /**
      * Check if mob should counter-attack after being hit
      */
     public boolean shouldCounterAttack(Mob mob, LivingEntity attacker) {
-        if (attacker == null || !mob.hasLineOfSight(attacker)) {
-            return false;
-        }
+        try {
+            // NULL CHECK: Validate inputs
+            if (mob == null || attacker == null || !mob.isAlive() || !attacker.isAlive()) {
+                return false;
+            }
+            
+            if (!mob.hasLineOfSight(attacker)) {
+                return false;
+            }
         
         ReflexState state = getOrCreateState(mob);
         
@@ -168,15 +186,20 @@ public class ReflexModule {
         }
         
         return success;
+        } catch (Exception e) {
+            return false; // Safe fallback
+        }
     }
     
     /**
      * Check if mob should jump for critical hit
      */
     public boolean shouldJumpCrit(Mob mob, LivingEntity target) {
-        if (target == null) {
-            return false;
-        }
+        try {
+            // NULL CHECK: Validate inputs
+            if (mob == null || target == null || !mob.isAlive() || !target.isAlive()) {
+                return false;
+            }
         
         ReflexState state = getOrCreateState(mob);
         
@@ -207,15 +230,25 @@ public class ReflexModule {
         }
         
         return success;
+        } catch (Exception e) {
+            return false; // Safe fallback
+        }
     }
     
     /**
      * Register that mob was hit (for counter-attack tracking)
      */
     public void registerHit(Mob mob) {
-        ReflexState state = getOrCreateState(mob);
-        state.lastHitTime = System.currentTimeMillis();
-        state.totalHitsTaken++;
+        try {
+            if (mob == null) return;
+            
+            ReflexState state = getOrCreateState(mob);
+            if (state == null) return;
+            state.lastHitTime = System.currentTimeMillis();
+            state.totalHitsTaken++;
+        } catch (Exception e) {
+            // Silent fail - not critical
+        }
     }
     
     /**

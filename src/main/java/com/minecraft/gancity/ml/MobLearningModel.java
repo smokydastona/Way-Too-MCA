@@ -43,6 +43,9 @@ public class MobLearningModel {
         Thread t = new Thread(r, "MobLearning-Trainer");
         t.setDaemon(true);
         t.setPriority(Thread.MIN_PRIORITY);
+        t.setUncaughtExceptionHandler((thread, throwable) -> {
+            LOGGER.error("Uncaught exception in MobLearning training thread: {}", throwable.getMessage());
+        });
         return t;
     });
     

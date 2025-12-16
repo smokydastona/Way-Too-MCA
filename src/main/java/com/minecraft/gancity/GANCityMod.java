@@ -152,16 +152,20 @@ public class GANCityMod {
     
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
-        
-        tickCounter++;
-        
-        // Auto-save every 10 minutes (12000 ticks)
-        if (tickCounter >= AUTO_SAVE_INTERVAL_TICKS) {
-            tickCounter = 0;
-            performAutoSave();
+        try {
+            if (event.phase != TickEvent.Phase.END) {
+                return;
+            }
+            
+            tickCounter++;
+            
+            // Auto-save every 10 minutes (12000 ticks)
+            if (tickCounter >= AUTO_SAVE_INTERVAL_TICKS) {
+                tickCounter = 0;
+                performAutoSave();
+            }
+        } catch (Exception e) {
+            LOGGER.error("Exception in server tick: {}", e.getMessage());
         }
     }
     

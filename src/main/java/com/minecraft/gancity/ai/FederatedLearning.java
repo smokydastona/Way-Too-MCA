@@ -53,6 +53,9 @@ public class FederatedLearning {
         r -> {
             Thread t = new Thread(r, "FederatedLearning-Sync");
             t.setDaemon(true);
+            t.setUncaughtExceptionHandler((thread, throwable) -> {
+                LOGGER.error("Uncaught exception in FederatedLearning thread: {}", throwable.getMessage());
+            });
             return t;
         }
     );

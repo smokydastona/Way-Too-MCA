@@ -1,12 +1,14 @@
 package com.minecraft.gancity.ai;
 
 import com.minecraft.gancity.GANCityMod;
+import com.mojang.logging.LogUtils;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.Spider;
 import net.minecraftforge.fml.ModList;
+import org.slf4j.Logger;
 
 import java.util.EnumSet;
 
@@ -16,6 +18,8 @@ import java.util.EnumSet;
  * Works via EntityJoinLevelEvent instead of mixin injection
  */
 public class EnhancedMeleeGoal extends Goal {
+    private static final Logger LOGGER = LogUtils.getLogger();
+    
     private final Mob mob;
     private final double speedModifier;
     private final boolean followingTargetEvenIfNotSeen;
@@ -133,24 +137,40 @@ public class EnhancedMeleeGoal extends Goal {
     
     @Override
     public void tick() {
-        if (this.target == null) return;
-        
-        combatTicks++;
-        this.mob.getLookControl().setLookAt(this.target, 30.0F, 30.0F);
-        
-        if (combatTicks % 10 == 0 && target instanceof net.minecraft.world.entity.player.Player) {
-            behaviorAI.recordTacticalSample(mobId, mob, (net.minecraft.world.entity.player.Player) target, 0);
-        }
-        
-        if (--this.ticksUntilNextAIUpdate <= 0) {
-            if (--this.ticksUntilNextAction <= 0) {
-                selectNextAction();
-                this.ticksUntilNextAction = 20 + mob.getRandom().nextInt(20);
+        try {
+            // NULL CHECK: Validate target exists and is alive
+            if (this.target == null || !this.target.isAlive()) {
+                this.stop();
+                return;
             }
-            this.ticksUntilNextAIUpdate = AI_UPDATE_INTERVAL;
+            
+            // NULL CHECK: Validate mob still exists
+            if (this.mob == null || !this.mob.isAlive()) {
+                return;
+            }
+            
+            combatTicks++;
+            this.mob.getLookControl().setLookAt(this.target, 30.0F, 30.0F);
+            
+            if (combatTicks % 10 == 0 && target instanceof net.minecraft.world.entity.player.Player) {
+                if (behaviorAI != null) {
+                    behaviorAI.recordTacticalSample(mobId, mob, (net.minecraft.world.entity.player.Player) target, 0);
+                }
+            }
+            
+            if (--this.ticksUntilNextAIUpdate <= 0) {
+                if (--this.ticksUntilNextAction <= 0) {
+                    selectNextAction();
+                    this.ticksUntilNextAction = 20 + mob.getRandom().nextInt(20);
+                }
+                this.ticksUntilNextAIUpdate = AI_UPDATE_INTERVAL;
+            }
+            
+            executeAction();
+        } catch (Exception e) {
+            LOGGER.error("Exception in EnhancedMeleeGoal tick for {}: {}", 
+                mob != null ? mob.getType() : "null", e.getMessage());
         }
-        
-        executeAction();
     }
     
     private void recordCombatOutcome() {
@@ -171,13 +191,17 @@ public class EnhancedMeleeGoal extends Goal {
     }
     
     private void selectNextAction() {
-        if (target == null) return;
-        
-        MobBehaviorAI.MobState state = new MobBehaviorAI.MobState(
-            mob.getHealth() / mob.getMaxHealth(),
-            target.getHealth() / target.getMaxHealth(),
-            (float) mob.distanceTo(target)
-        );
+        try {
+            // NULL CHECK: Validate target and mob
+            if (target == null || !target.isAlive() || mob == null || !mob.isAlive()) {
+                return;
+            }
+            
+            MobBehaviorAI.MobState state = new MobBehaviorAI.MobState(
+                mob.getHealth() / mob.getMaxHealth(),
+                target.getHealth() / target.getMaxHealth(),
+                (float) mob.distanceTo(target)
+            );
         
         state.isNight = !mob.level().isDay();
         state.biome = mob.level().getBiome(mob.blockPosition()).toString();
@@ -195,11 +219,17 @@ public class EnhancedMeleeGoal extends Goal {
         }
         
         String previousAction = currentAction;
-        currentAction = behaviorAI.selectMobActionWithEntity(mobType, state, mobId, mob);
-        
-        if (previousAction != null && !previousAction.equals(currentAction)) {
-            double reward = calculateActionReward();
-            behaviorAI.trackActionInSequence(mobId, previousAction, reward);
+        if (behaviorAI != null) {
+            currentAction = behaviorAI.selectMobActionWithEntity(mobType, state, mobId, mob);
+            
+            if (previousAction != null && !previousAction.equals(currentAction)) {
+                double reward = calculateActionReward();
+                behaviorAI.trackActionInSequence(mobId, previousAction, reward);
+            }
+        }
+        } catch (Exception e) {
+            LOGGER.error("Exception in selectNextAction: {}", e.getMessage());
+            currentAction = "straight_charge"; // Fallback to safe action
         }
     }
     
@@ -225,10 +255,14 @@ public class EnhancedMeleeGoal extends Goal {
     }
     
     private void executeAction() {
-        if (target == null) return;
-        
-        double distance = mob.distanceTo(target);
-        double baseSpeed = speedModifier;
+        try {
+            // NULL CHECK: Validate target and mob
+            if (target == null || !target.isAlive() || mob == null || !mob.isAlive()) {
+                return;
+            }
+            
+            double distance = mob.distanceTo(target);
+            double baseSpeed = speedModifier;
         
         switch (currentAction) {
             case "straight_charge":
@@ -260,10 +294,14 @@ public class EnhancedMeleeGoal extends Goal {
         if (distance <= mob.getBbWidth() * 2.0F + target.getBbWidth()) {
             mob.doHurtTarget(target);
         }
+        } catch (Exception e) {
+            LOGGER.error("Exception in executeAction: {}", e.getMessage());
+        }
     }
     
     private void circleAroundTarget(double speed) {
-        if (target == null) return;
+        // NULL CHECK: Validate target exists and is alive
+        if (target == null || !target.isAlive()) return;
         
         double angle = Math.atan2(mob.getZ() - target.getZ(), mob.getX() - target.getX());
         double circleAngle = angle + Math.PI / 4;
@@ -275,7 +313,8 @@ public class EnhancedMeleeGoal extends Goal {
     }
     
     private void retreatFromTarget(double speed) {
-        if (target == null) return;
+        // NULL CHECK: Validate target exists and is alive
+        if (target == null || !target.isAlive()) return;
         
         double angle = Math.atan2(target.getZ() - mob.getZ(), target.getX() - mob.getX());
         double distance = 5.0;

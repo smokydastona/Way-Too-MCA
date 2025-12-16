@@ -28,6 +28,9 @@ public class PerformanceOptimizer {
         Thread t = new Thread(r, "MobAI-Training");
         t.setDaemon(true);  // Don't prevent JVM shutdown
         t.setPriority(Thread.MIN_PRIORITY);  // Don't interfere with game thread
+        t.setUncaughtExceptionHandler((thread, throwable) -> {
+            LOGGER.error("Uncaught exception in MobAI training thread: {}", throwable.getMessage());
+        });
         return t;
     });
     
