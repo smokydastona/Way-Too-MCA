@@ -186,8 +186,12 @@ public abstract class MobAIEnhancementMixin {
             this.initialMobHealth = mob.getHealth() / mob.getMaxHealth();
             this.initialTargetHealth = target.getHealth() / target.getMaxHealth();
             
-            // Start sequence tracking for advanced ML
+            // Start sequence tracking for advanced ML (old system)
             behaviorAI.startCombatSequence(mobId);
+            
+            // Start tactical episode tracking (NEW SYSTEM)
+            String mobType = mob.getType().getDescription().getString().toLowerCase();
+            behaviorAI.startCombatEpisode(mobId, mobType, mob.tickCount);
             
             selectNextAction();
         }
@@ -198,10 +202,18 @@ public abstract class MobAIEnhancementMixin {
             if (this.target != null) {
                 recordCombatOutcome();
                 
-                // End sequence tracking and submit to Cloudflare
+                // End sequence tracking and submit to Cloudflare (old system)
                 String mobType = mob.getType().getDescription().getString().toLowerCase();
                 String outcome = determineOutcome();
                 behaviorAI.endCombatSequence(mobId, mobType, outcome);
+                
+                // End tactical episode (NEW SYSTEM)
+                boolean mobKilled = !mob.isAlive();
+                boolean targetKilled = !target.isAlive();
+                String playerId = (target instanceof net.minecraft.world.entity.player.Player) 
+                    ? target.getUUID().toString() 
+                    : "npc";
+                behaviorAI.endCombatEpisode(mobId, targetKilled, mobKilled, mob.tickCount, playerId);
             }
             
             this.target = null;
@@ -231,6 +243,11 @@ public abstract class MobAIEnhancementMixin {
             combatTicks++;
             
             this.mob.getLookControl().setLookAt(this.target, 30.0F, 30.0F);
+            
+            // TACTICAL EPISODE: Sample every 10 ticks (0.5s)
+            if (combatTicks % 10 == 0 && target instanceof net.minecraft.world.entity.player.Player) {
+                behaviorAI.recordTacticalSample(mobId, mob, (net.minecraft.world.entity.player.Player) target, 0);
+            }
             
             // CRITICAL: Throttle AI updates to every AI_UPDATE_INTERVAL ticks
             if (--this.ticksUntilNextAIUpdate <= 0) {
