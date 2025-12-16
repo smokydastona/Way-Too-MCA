@@ -36,7 +36,7 @@ public abstract class MobAIEnhancementMixin {
      * 
      * Compatibility: Skips Ice and Fire mobs (they have complex custom AI)
      */
-    @Inject(method = {"registerGoals", "m_8099_"}, at = @At("TAIL"))
+    @Inject(method = "m_8099_", at = @At("TAIL"))
     private void onRegisterGoals(CallbackInfo ci) {
         Mob mob = (Mob)(Object)this;
         
