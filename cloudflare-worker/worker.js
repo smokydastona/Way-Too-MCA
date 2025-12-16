@@ -1520,6 +1520,7 @@ async function syncEpisodeToGitHub(env, episodeData) {
   try {
     const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const filePath = `episodes/${date}.jsonl`;
+    const repo = env.GITHUB_REPO || 'smokydastona/adaptive-ai-federation-logs';
     
     // Convert episode to JSONL format (one line of JSON)
     const episodeLine = JSON.stringify(episodeData) + '\n';
@@ -1528,7 +1529,7 @@ async function syncEpisodeToGitHub(env, episodeData) {
     let existingContent = '';
     try {
       const getResponse = await fetch(
-        `https://api.github.com/repos/smokydastona/adaptive-ai-federation-logs/contents/${filePath}`,
+        `https://api.github.com/repos/${repo}/contents/${filePath}`,
         {
           headers: {
             'Authorization': `token ${env.GITHUB_TOKEN}`,
@@ -1553,7 +1554,7 @@ async function syncEpisodeToGitHub(env, episodeData) {
     let sha = null;
     try {
       const getResponse = await fetch(
-        `https://api.github.com/repos/smokydastona/adaptive-ai-federation-logs/contents/${filePath}`,
+        `https://api.github.com/repos/${repo}/contents/${filePath}`,
         {
           headers: {
             'Authorization': `token ${env.GITHUB_TOKEN}`,
@@ -1577,7 +1578,7 @@ async function syncEpisodeToGitHub(env, episodeData) {
     };
     
     const response = await fetch(
-      `https://api.github.com/repos/smokydastona/adaptive-ai-federation-logs/contents/${filePath}`,
+      `https://api.github.com/repos/${repo}/contents/${filePath}`,
       {
         method: 'PUT',
         headers: {
