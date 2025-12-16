@@ -16,6 +16,9 @@ Features adaptive combat AI, dynamic dialogue generation, and personality learni
 Powered by Deep Java Library (DJL) for AI inference.
 '''
 
+[[mixins]]
+config="adaptivemobai.mixins.json"
+
 [[dependencies.adaptivemobai]]
     modId="forge"
     mandatory=true
