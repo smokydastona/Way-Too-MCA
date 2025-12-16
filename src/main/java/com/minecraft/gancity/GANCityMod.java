@@ -98,7 +98,11 @@ public class GANCityMod {
     public static void initFederationIfNeeded() {
         if (!federationInitialized) {
             federationInitialized = true;
-            initializeFederatedLearning();
+            try {
+                initializeFederatedLearning();
+            } catch (Exception e) {
+                LOGGER.error("Failed to initialize federation, continuing without it: {}", e.getMessage());
+            }
         }
     }
     
