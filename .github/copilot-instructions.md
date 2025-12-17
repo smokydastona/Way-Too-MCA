@@ -26,7 +26,7 @@ git push
 This triggers GitHub Actions to compile the mod. The workspace must stay clean - no `build/` or `.gradle/` directories.
 
 ## Project Overview
-This is a **Forge 47.4.0 Minecraft 1.20.1 mod** that uses **real machine learning** (Deep Q-Network) to enhance Minecraft mob AI. The mod works standalone - MCA Reborn integration is optional and detected at runtime.
+This is a **Forge 47.4.0 Minecraft 1.20.1 mod** that uses **real machine learning** (Deep Q-Network) to enhance Minecraft mob AI. The mod works standalone, but connects to a global dataset via a federated learning system (Cloudflare Workers backend) to share learned tactics across servers.
 
 **Dual Codebase Structure:**
 - **Legacy (inactive)**: Python GAN training scripts (`*.py` files, `data/`) - original city generation concept

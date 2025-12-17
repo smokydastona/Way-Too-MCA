@@ -7,6 +7,7 @@ import com.minecraft.gancity.compat.ModCompatibility;
 import com.minecraft.gancity.compat.CuriosIntegration;
 import com.minecraft.gancity.compat.FTBTeamsIntegration;
 import com.minecraft.gancity.mca.MCAIntegration;
+import com.minecraft.gancity.ml.MLModelLoader;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
@@ -47,14 +48,14 @@ public class GANCityMod {
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("MCA AI Enhanced - Deferring initialization to avoid classloading deadlock");
         
-        // CRITICAL: Do NOT call ModList.get() or any mod checking during commonSetup!
-        // This happens at "Compatibility level set to JAVA_17" BEFORE ModList is ready
-        // Queue all initialization to run AFTER the event completes
+        // CRITICAL: Do NOT load DJL classes during commonSetup!
+        // DJL PyTorch tries to extract native libs at "Compatibility level set to JAVA_17"
+        // ML models will be loaded later in onServerStarting event
         event.enqueueWork(() -> {
             try {
                 LOGGER.info("MCA AI Enhanced - Initializing AI systems (SERVER-ONLY)...");
                 
-                // Configure DJL (safe - just system properties)
+                // Configure DJL cache (safe - just system properties, no classloading)
                 String gameDir = System.getProperty("user.dir");
                 String djlCachePath = gameDir + "/libraries/ai.djl";
                 System.setProperty("DJL_CACHE_DIR", djlCachePath);
@@ -74,7 +75,7 @@ public class GANCityMod {
                     LOGGER.warn("MCA AI Enhanced - MCA Reborn not found. Villager dialogue features disabled.");
                 }
                 
-                LOGGER.info("MCA AI Enhanced - Initialization complete");
+                LOGGER.info("MCA AI Enhanced - Basic initialization complete (ML models deferred)");
             } catch (Exception e) {
                 LOGGER.error("Failed to initialize MCA AI Enhanced: {}", e.getMessage(), e);
             }
@@ -84,6 +85,10 @@ public class GANCityMod {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         LOGGER.info("MCA AI Enhanced - Server starting with AI enhancements");
+        
+        // NOW safe to load DJL - Forge init complete
+        LOGGER.info("Initializing ML models (DJL lazy loading)...");
+        MLModelLoader.initializeModels();
         
         // Initialize federated learning when server starts (works for dedicated servers)
         initFederationIfNeeded();
@@ -143,6 +148,10 @@ public class GANCityMod {
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         LOGGER.info("MCA AI Enhanced - Server stopping, saving ML models...");
+        
+        // Shutdown ML models gracefully
+        MLModelLoader.shutdown();
+        
         if (mobBehaviorAI != null) {
             mobBehaviorAI.saveModel();
         }

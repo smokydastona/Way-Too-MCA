@@ -102,9 +102,9 @@ dependencies {
     // NOT bundled due to Sinytra Connector Jar-in-Jar conflicts
     implementation 'it.unimi.dsi:fastutil:8.5.12'
 
-    // Deep Java Library (DJL) for ML inference - ALL runtime dependencies
-    // NOT bundled to avoid Jar-in-Jar conflicts with Sinytra Connector
-    // Forge will automatically download from Maven Central on first use
+    // Deep Java Library (DJL) for ML inference - LAZY LOADED
+    // Classes isolated to prevent loading during Forge init ("Compatibility level set to JAVA_17")
+    // PyTorch native libraries extracted on-demand after server starts
     implementation 'ai.djl:api:0.25.0'
     implementation 'ai.djl:basicdataset:0.25.0'
     runtimeOnly 'ai.djl.pytorch:pytorch-engine:0.25.0'
