@@ -25,6 +25,7 @@
  */
 
 import { FederationCoordinator } from './src/FederationCoordinator.js';
+import { GitHubLogger } from './src/GitHubLogger.js';
 
 export { FederationCoordinator };
 
@@ -462,6 +463,33 @@ export default {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
+    }
+  }
+  ,
+  async scheduled(event, env, ctx) {
+    // Hourly cron is configured in wrangler.toml.
+    // Purpose: write a lightweight status heartbeat to GitHub even if no aggregation happens.
+    try {
+      const coordinatorId = env.FEDERATION_COORDINATOR.idFromName('global');
+      const coordinator = env.FEDERATION_COORDINATOR.get(coordinatorId);
+
+      const coordinatorReq = new Request('https://coordinator/coordinator/status', { method: 'GET' });
+      const response = await coordinator.fetch(coordinatorReq);
+      const status = await response.json();
+
+      if (env.GITHUB_TOKEN && env.GITHUB_REPO) {
+        const logger = new GitHubLogger(env.GITHUB_TOKEN, env.GITHUB_REPO);
+        await logger.logStatus({
+          ...status,
+          worker: 'healthy',
+          version: '3.0.0',
+          scheduled: true,
+          cron: event?.cron || null
+        });
+      }
+    } catch (error) {
+      // Never throw from scheduled; keep it quiet.
+      console.warn('⚠️ Scheduled status snapshot failed (non-critical):', error?.message || error);
     }
   }
 };

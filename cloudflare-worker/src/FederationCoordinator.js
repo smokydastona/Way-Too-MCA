@@ -265,6 +265,17 @@ export class FederationCoordinator {
 
       await this.persistState();
 
+      // GitHub observability (non-blocking)
+      if (this.logger) {
+        this.logger.logUpload({
+          mobType,
+          round: this.currentRound,
+          bootstrap: true
+        }).catch(() => {
+          // Silent failure - GitHubLogger already warns
+        });
+      }
+
       // If we have enough models, trigger aggregation
       if (this.models.size >= 3) {
         console.log(`📊 Triggering aggregation: ${this.models.size} models ready`);
@@ -320,6 +331,17 @@ export class FederationCoordinator {
     });
 
     await this.persistState();
+
+    // GitHub observability (non-blocking)
+    if (this.logger) {
+      this.logger.logUpload({
+        mobType,
+        round: this.currentRound,
+        bootstrap: false
+      }).catch(() => {
+        // Silent failure - GitHubLogger already warns
+      });
+    }
 
     console.log(`✅ Upload accepted from ${serverId} (${mobType}), Round ${this.currentRound}`);
 
