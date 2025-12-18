@@ -261,12 +261,20 @@ export class FederationCoordinator {
     // LOG TO GITHUB (side effect only - never blocks federation)
     // Keep GitHub layout clean: one file per round that includes the global model snapshot.
     if (this.logger) {
+      // Privacy-safe contributor stats (counts only, no identifiers persisted)
+      const uniqueServers = new Set();
+      for (const key of this.models.keys()) {
+        // contributorKey format: `${serverId}:${mobType}`
+        const serverIdPart = key.split(':')[0];
+        if (serverIdPart) uniqueServers.add(serverIdPart);
+      }
+
       // Extract mob types and stats for the log
       const mobTypes = Object.keys(aggregated);
       const modelStats = {};
       for (const [mobType, tactics] of Object.entries(aggregated)) {
         modelStats[mobType] = {
-          actionCount: Object.keys(tactics).length,
+          distinctActionsObserved: Object.keys(tactics).length,
           totalExperiences: Object.values(tactics).reduce((sum, t) => sum + (t.count || 0), 0)
         };
       }
@@ -275,7 +283,10 @@ export class FederationCoordinator {
       this.logger.logRound({
         round: this.currentRound,
         timestamp: new Date(this.globalModel.timestamp).toISOString(),
-        contributors: this.models.size,
+        contributors: {
+          servers: uniqueServers.size,
+          submissions: this.models.size
+        },
         mobTypes,
         modelStats,
         tactics: aggregated

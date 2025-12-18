@@ -40,12 +40,14 @@ export class GitHubLogger {
 
       const tactics = roundData.tactics || {};
       const mobTypeSummary = this.#buildMobTypeSummary(tactics);
+
+      const contributors = this.#normalizeContributors(roundData.contributors);
       
       const content = JSON.stringify({
         schema: {
           name: 'mca-ai-enhanced.federation.round',
-          version: 1,
-          description: 'One file per federation round: metadata + full aggregated tactics snapshot'
+          version: 2,
+          description: 'One file per federation round: metadata + full aggregated tactics snapshot (privacy-safe)'
         },
         privacy: {
           personalData: false,
@@ -54,17 +56,37 @@ export class GitHubLogger {
             'No server identifiers are stored; only aggregate counts.'
           ]
         },
+        semantics: {
+          contributors: {
+            meaning: 'Aggregate counts only (no identifiers). `submissions` reflects distinct serverId+mobType contributions for the round; `servers` reflects distinct server contributors for the round.'
+          },
+          reward: {
+            meaning: 'Average tactical reward signal emitted by the mod. This is an internal, unitless score used for ranking/pruning tactics.',
+            normalized: false,
+            units: 'arbitrary',
+            notes: [
+              'Reward is computed client-side and may change across mod versions.',
+              'Do not assume a fixed numeric range; treat as relative within the same schema/version.'
+            ]
+          },
+          success: {
+            meaning: 'Binomial outcome aggregated across contributing samples: successes / attempts.',
+            notes: [
+              'For low attempts, rates have low confidence; prefer using (successes, attempts) over rate alone.'
+            ]
+          }
+        },
         round: roundData.round,
         timestamp: roundData.timestamp || timestamp,
-        contributors: roundData.contributors,
+        contributors,
         mobTypes: roundData.mobTypes || [],
-        modelStats: roundData.modelStats || {},
+        modelStats: this.#normalizeModelStats(roundData.modelStats || {}),
         aggregation: {
           method: roundData.aggregationMethod || 'FedAvg',
           workerVersion: '3.0.0'
         },
         // Full global model snapshot (this is the important data)
-        tactics,
+        tactics: this.#normalizeTacticsSnapshot(tactics),
         // Compact summary for quick human scanning
         mobTypeSummary,
         metadata: {
@@ -100,7 +122,7 @@ export class GitHubLogger {
       actions.sort((a, b) => (b.avgReward - a.avgReward) || (b.successRate - a.successRate) || (b.count - a.count));
 
       summary[mobType] = {
-        actionCount: actions.length,
+        distinctActionsObserved: actions.length,
         topActions: actions.slice(0, 10)
       };
     }
@@ -124,10 +146,80 @@ export class GitHubLogger {
       });
 
       await this.appendToFile(filename, line + '\n');
-      console.log(`📝 GitHub: Logged upload from ${uploadData.serverId}`);
+      console.log('📝 GitHub: Logged upload event');
     } catch (error) {
       console.warn(`⚠️ GitHub upload logging failed (non-critical): ${error.message}`);
     }
+  }
+
+  #normalizeContributors(contributors) {
+    if (contributors && typeof contributors === 'object') {
+      return {
+        servers: typeof contributors.servers === 'number' ? contributors.servers : undefined,
+        submissions: typeof contributors.submissions === 'number' ? contributors.submissions : undefined
+      };
+    }
+
+    // Back-compat: older callers passed a single number (models.size)
+    if (typeof contributors === 'number') {
+      return { submissions: contributors };
+    }
+
+    return {};
+  }
+
+  #normalizeModelStats(modelStatsByMobType) {
+    const normalized = {};
+    for (const [mobType, stats] of Object.entries(modelStatsByMobType || {})) {
+      const distinctActionsObserved = typeof stats?.distinctActionsObserved === 'number'
+        ? stats.distinctActionsObserved
+        : (typeof stats?.actionCount === 'number' ? stats.actionCount : undefined);
+
+      normalized[mobType] = {
+        distinctActionsObserved,
+        totalExperiences: typeof stats?.totalExperiences === 'number' ? stats.totalExperiences : undefined,
+        legacy: {
+          actionCount: typeof stats?.actionCount === 'number' ? stats.actionCount : undefined
+        }
+      };
+    }
+    return normalized;
+  }
+
+  #normalizeTacticsSnapshot(tacticsByMobType) {
+    const normalized = {};
+
+    for (const [mobType, tactics] of Object.entries(tacticsByMobType || {})) {
+      const mobTactics = {};
+
+      for (const [action, t] of Object.entries(tactics || {})) {
+        const count = typeof t?.count === 'number' ? t.count : 0;
+        const successCount = typeof t?.successCount === 'number' ? t.successCount : 0;
+        const successRate = typeof t?.successRate === 'number'
+          ? t.successRate
+          : (count > 0 ? (successCount / count) : 0);
+
+        mobTactics[action] = {
+          avgReward: typeof t?.avgReward === 'number' ? t.avgReward : 0,
+          count,
+          successCount,
+          failureCount: typeof t?.failureCount === 'number' ? t.failureCount : undefined,
+          successRate,
+          success: {
+            successes: successCount,
+            attempts: count,
+            rate: successRate
+          },
+          legacy: {
+            weightedAvgReward: typeof t?.weightedAvgReward === 'number' ? t.weightedAvgReward : undefined
+          }
+        };
+      }
+
+      normalized[mobType] = mobTactics;
+    }
+
+    return normalized;
   }
 
   /**
