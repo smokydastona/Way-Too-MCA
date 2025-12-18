@@ -1,11 +1,9 @@
 package com.minecraft.gancity.mixin;
 
-import com.minecraft.gancity.GANCityMod;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.*;
-import net.minecraftforge.fml.ModList;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -23,16 +21,10 @@ import java.util.EnumSet;
 @Mixin(Mob.class)
 @SuppressWarnings({"null", "unused"})
 public abstract class MobAIEnhancementMixin {
-    
-    // DIAGNOSTIC: Static initializer to verify mixin class loads
-    static {
-        System.out.println("=== MobAIEnhancementMixin: Static initialization START ===");
-        System.out.println("=== If crash happens here, imports or static fields are the problem ===");
-    }
-    
-    // CRITICAL: Lazy-load Ice and Fire check to avoid ModList.get() during static init
-    // DO NOT use: private static final boolean ICE_AND_FIRE_LOADED = ModList.get().isLoaded("iceandfire");
-    // That causes crash at "Compatibility level set to JAVA_17" - ModList not ready yet!
+
+    // CRITICAL: Avoid any direct reference to Forge classes (e.g., ModList) in mixin
+    // fields or imports. Mixin may load/verify mixin classes very early and linking
+    // Forge classes can crash the game before Forge is initialized.
     private static Boolean iceAndFireLoaded = null;
     
     // Reflection helpers to avoid importing MobBehaviorAI (which imports ml.* which imports DJL)
@@ -49,13 +41,30 @@ public abstract class MobAIEnhancementMixin {
             }
         }
     }
+
+    private static Object tryGetMobBehaviorAI() {
+        try {
+            Class<?> modClass = Class.forName("com.minecraft.gancity.GANCityMod");
+            return modClass.getMethod("getMobBehaviorAI").invoke(null);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isModLoaded(String modId) {
+        try {
+            Class<?> modListClass = Class.forName("net.minecraftforge.fml.ModList");
+            Object modList = modListClass.getMethod("get").invoke(null);
+            Object result = modListClass.getMethod("isLoaded", String.class).invoke(modList, modId);
+            return result instanceof Boolean && (Boolean) result;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
     
     private static boolean isIceAndFireLoaded() {
-        System.out.println("=== MobAIEnhancementMixin: isIceAndFireLoaded() called ===");
         if (iceAndFireLoaded == null) {
-            System.out.println("=== MobAIEnhancementMixin: Calling ModList.get().isLoaded(iceandfire) ===");
-            iceAndFireLoaded = ModList.get().isLoaded("iceandfire");
-            System.out.println("=== MobAIEnhancementMixin: Result = " + iceAndFireLoaded + " ===");
+            iceAndFireLoaded = isModLoaded("iceandfire");
         }
         return iceAndFireLoaded;
     }
@@ -72,7 +81,7 @@ public abstract class MobAIEnhancementMixin {
     private void onRegisterGoals(CallbackInfo ci) {
         try {
             // SAFE MODE CHECK: Skip AI if safe mode enabled or initialization failed
-            Object behaviorAI = GANCityMod.getMobBehaviorAI();
+            Object behaviorAI = tryGetMobBehaviorAI();
             if (behaviorAI == null) {
                 return;  // Safe mode or initialization failure - use vanilla AI
             }
@@ -121,7 +130,7 @@ public abstract class MobAIEnhancementMixin {
         } catch (Throwable t) {
             // CRITICAL: Catch all errors to prevent mixin from breaking Forge init
             // Log and continue - mob will just use vanilla AI
-            GANCityMod.LOGGER.error("❌ MobAIEnhancementMixin failed for mob (using vanilla AI): {}", t.getMessage());
+            System.err.println("[MCA AI Enhanced] MobAIEnhancementMixin failed (using vanilla AI): " + t);
         }
     }
     
@@ -158,15 +167,8 @@ public abstract class MobAIEnhancementMixin {
             this.enableEnvironmentalTactics = enableEnvironmental;
             this.isVillager = isVillager;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
-            this.behaviorAI = GANCityMod.getMobBehaviorAI();
+            this.behaviorAI = tryGetMobBehaviorAI();
             this.mobId = mob.getUUID().toString();
-            
-            // CRITICAL DEBUG: Check if behaviorAI is null
-            if (this.behaviorAI == null) {
-                org.apache.logging.log4j.LogManager.getLogger().error("❌ [MIXIN-CRITICAL] behaviorAI is NULL in constructor! getMobBehaviorAI() returned null for {}", mob.getClass().getSimpleName());
-            } else {
-                org.apache.logging.log4j.LogManager.getLogger().info("✅ [MIXIN-OK] behaviorAI successfully initialized for {}", mob.getClass().getSimpleName());
-            }
             
             initReflection();  // Initialize reflection for MobState creation
             
