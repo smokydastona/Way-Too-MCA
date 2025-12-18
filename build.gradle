@@ -102,13 +102,12 @@ dependencies {
     // NOT bundled due to Sinytra Connector Jar-in-Jar conflicts
     implementation 'it.unimi.dsi:fastutil:8.5.12'
 
-    // Deep Java Library (DJL) for ML inference - compileOnly to avoid bundling native libs
-    // The mod will gracefully fallback if DJL isn't available at runtime
-    compileOnly 'ai.djl:api:0.25.0'
-    compileOnly 'ai.djl:basicdataset:0.25.0'
-    compileOnly 'ai.djl.pytorch:pytorch-engine:0.25.0'
-    compileOnly 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
-    compileOnly 'ai.djl.huggingface:tokenizers:0.25.0'
+    // Deep Java Library (DJL) for ML inference - bundled via jarJar
+    implementation 'ai.djl:api:0.25.0'
+    implementation 'ai.djl:basicdataset:0.25.0'
+    runtimeOnly 'ai.djl.pytorch:pytorch-engine:0.25.0'
+    runtimeOnly 'ai.djl.pytorch:pytorch-model-zoo:0.25.0'
+    implementation 'ai.djl.huggingface:tokenizers:0.25.0'
 }
 
 // Configure the regular jar task with the new name
