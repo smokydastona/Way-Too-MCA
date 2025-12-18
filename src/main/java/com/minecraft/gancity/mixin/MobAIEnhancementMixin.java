@@ -1,6 +1,5 @@
 package com.minecraft.gancity.mixin;
 
-import com.minecraft.gancity.ai.MobBehaviorAI;
 import com.minecraft.gancity.GANCityMod;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -36,6 +35,21 @@ public abstract class MobAIEnhancementMixin {
     // That causes crash at "Compatibility level set to JAVA_17" - ModList not ready yet!
     private static Boolean iceAndFireLoaded = null;
     
+    // Reflection helpers to avoid importing MobBehaviorAI (which imports ml.* which imports DJL)
+    private static Class<?> mobStateClass = null;
+    private static java.lang.reflect.Constructor<?> mobStateConstructor = null;
+    
+    private static void initReflection() {
+        if (mobStateClass == null) {
+            try {
+                mobStateClass = Class.forName("com.minecraft.gancity.ai.MobBehaviorAI$MobState");
+                mobStateConstructor = mobStateClass.getConstructor(float.class, float.class, float.class);
+            } catch (Exception e) {
+                System.err.println("Failed to initialize MobBehaviorAI reflection: " + e);
+            }
+        }
+    }
+    
     private static boolean isIceAndFireLoaded() {
         System.out.println("=== MobAIEnhancementMixin: isIceAndFireLoaded() called ===");
         if (iceAndFireLoaded == null) {
@@ -58,7 +72,7 @@ public abstract class MobAIEnhancementMixin {
     private void onRegisterGoals(CallbackInfo ci) {
         try {
             // SAFE MODE CHECK: Skip AI if safe mode enabled or initialization failed
-            MobBehaviorAI behaviorAI = GANCityMod.getMobBehaviorAI();
+            Object behaviorAI = GANCityMod.getMobBehaviorAI();
             if (behaviorAI == null) {
                 return;  // Safe mode or initialization failure - use vanilla AI
             }
@@ -127,7 +141,7 @@ public abstract class MobAIEnhancementMixin {
         private int ticksUntilNextAction;
         private int ticksUntilNextAIUpdate;  // CRITICAL: Throttle AI decisions
         private String currentAction = "straight_charge";
-        private final MobBehaviorAI behaviorAI;
+        private final Object behaviorAI;  // MobBehaviorAI instance (use Object to avoid import)
         private final String mobId;  // Unique ID for this mob instance
         private String persistentProfile = null;  // Villager's permanent tactical profile (MCA or vanilla)
         private float initialMobHealth;
@@ -146,6 +160,8 @@ public abstract class MobAIEnhancementMixin {
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
             this.behaviorAI = GANCityMod.getMobBehaviorAI();
             this.mobId = mob.getUUID().toString();
+            
+            initReflection();  // Initialize reflection for MobState creation
             
             // VILLAGERS: Assign permanent tactical profile on creation (MCA or vanilla)
             if (isVillager) {
@@ -216,12 +232,20 @@ public abstract class MobAIEnhancementMixin {
             this.initialMobHealth = mob.getHealth() / mob.getMaxHealth();
             this.initialTargetHealth = target.getHealth() / target.getMaxHealth();
             
-            // Start sequence tracking for advanced ML (old system)
-            behaviorAI.startCombatSequence(mobId);
-            
-            // Start tactical episode tracking (NEW SYSTEM)
-            String mobType = mob.getType().getDescription().getString().toLowerCase();
-            behaviorAI.startCombatEpisode(mobId, mobType, mob.tickCount);
+            if (behaviorAI != null) {
+                try {
+                    // Start sequence tracking for advanced ML (old system)
+                    java.lang.reflect.Method startSeqMethod = behaviorAI.getClass().getMethod("startCombatSequence", String.class);
+                    startSeqMethod.invoke(behaviorAI, mobId);
+                    
+                    // Start tactical episode tracking (NEW SYSTEM)
+                    String mobType = mob.getType().getDescription().getString().toLowerCase();
+                    java.lang.reflect.Method startEpisodeMethod = behaviorAI.getClass().getMethod("startCombatEpisode", String.class, String.class, int.class);
+                    startEpisodeMethod.invoke(behaviorAI, mobId, mobType, mob.tickCount);
+                } catch (Exception e) {
+                    // Silently fail
+                }
+            }
             
             selectNextAction();
         }
@@ -229,21 +253,27 @@ public abstract class MobAIEnhancementMixin {
         @Override
         public void stop() {
             // Combat ended - record outcome for learning
-            if (this.target != null) {
+            if (this.target != null && behaviorAI != null) {
                 recordCombatOutcome();
                 
-                // End sequence tracking and submit to Cloudflare (old system)
-                String mobType = mob.getType().getDescription().getString().toLowerCase();
-                String outcome = determineOutcome();
-                behaviorAI.endCombatSequence(mobId, mobType, outcome);
-                
-                // End tactical episode (NEW SYSTEM)
-                boolean mobKilled = !mob.isAlive();
-                boolean targetKilled = !target.isAlive();
-                String playerId = (target instanceof net.minecraft.world.entity.player.Player) 
-                    ? target.getUUID().toString() 
-                    : "npc";
-                behaviorAI.endCombatEpisode(mobId, targetKilled, mobKilled, mob.tickCount, playerId);
+                try {
+                    // End sequence tracking and submit to Cloudflare (old system)
+                    String mobType = mob.getType().getDescription().getString().toLowerCase();
+                    String outcome = determineOutcome();
+                    java.lang.reflect.Method endSeqMethod = behaviorAI.getClass().getMethod("endCombatSequence", String.class, String.class, String.class);
+                    endSeqMethod.invoke(behaviorAI, mobId, mobType, outcome);
+                    
+                    // End tactical episode (NEW SYSTEM)
+                    boolean mobKilled = !mob.isAlive();
+                    boolean targetKilled = !target.isAlive();
+                    String playerId = (target instanceof net.minecraft.world.entity.player.Player) 
+                        ? target.getUUID().toString() 
+                        : "npc";
+                    java.lang.reflect.Method endEpisodeMethod = behaviorAI.getClass().getMethod("endCombatEpisode", String.class, boolean.class, boolean.class, int.class, String.class);
+                    endEpisodeMethod.invoke(behaviorAI, mobId, targetKilled, mobKilled, mob.tickCount, playerId);
+                } catch (Exception e) {
+                    // Silently fail
+                }
             }
             
             this.target = null;
@@ -275,8 +305,13 @@ public abstract class MobAIEnhancementMixin {
             this.mob.getLookControl().setLookAt(this.target, 30.0F, 30.0F);
             
             // TACTICAL EPISODE: Sample every 10 ticks (0.5s)
-            if (combatTicks % 10 == 0 && target instanceof net.minecraft.world.entity.player.Player) {
-                behaviorAI.recordTacticalSample(mobId, mob, (net.minecraft.world.entity.player.Player) target, 0);
+            if (behaviorAI != null && combatTicks % 10 == 0 && target instanceof net.minecraft.world.entity.player.Player) {
+                try {
+                    java.lang.reflect.Method recordSampleMethod = behaviorAI.getClass().getMethod("recordTacticalSample", String.class, Mob.class, net.minecraft.world.entity.player.Player.class, int.class);
+                    recordSampleMethod.invoke(behaviorAI, mobId, mob, (net.minecraft.world.entity.player.Player) target, 0);
+                } catch (Exception e) {
+                    // Silently fail
+                }
             }
             
             // CRITICAL: Throttle AI updates to every AI_UPDATE_INTERVAL ticks
@@ -300,22 +335,37 @@ public abstract class MobAIEnhancementMixin {
         private void recordCombatOutcome() {
             if (behaviorAI == null || target == null) return;
             
-            // Build final state
-            MobBehaviorAI.MobState finalState = new MobBehaviorAI.MobState(
-                mob.getHealth() / mob.getMaxHealth(),
-                target.getHealth() / target.getMaxHealth(),
-                (float) mob.distanceTo(target)
-            );
-            finalState.combatTime = combatTicks / 20.0f;  // Convert to seconds
-            finalState.isNight = !mob.level().isDay();
-            finalState.biome = mob.level().getBiome(mob.blockPosition()).toString();
-            
-            // Check outcomes
-            boolean mobDied = !mob.isAlive();
-            boolean playerDied = !target.isAlive();
-            
-            // Record for learning with mob entity for attribute correlation tracking
-            behaviorAI.recordCombatOutcome(mobId, playerDied, mobDied, finalState, 0.0f, 0.0f, mob);
+            try {
+                // Build final state using reflection
+                Object finalState = mobStateConstructor.newInstance(
+                    mob.getHealth() / mob.getMaxHealth(),
+                    target.getHealth() / target.getMaxHealth(),
+                    (float) mob.distanceTo(target)
+                );
+                
+                // Set fields using reflection
+                java.lang.reflect.Field combatTimeField = mobStateClass.getField("combatTime");
+                combatTimeField.set(finalState, combatTicks / 20.0f);
+                
+                java.lang.reflect.Field isNightField = mobStateClass.getField("isNight");
+                isNightField.set(finalState, !mob.level().isDay());
+                
+                java.lang.reflect.Field biomeField = mobStateClass.getField("biome");
+                biomeField.set(finalState, mob.level().getBiome(mob.blockPosition()).toString());
+                
+                // Check outcomes
+                boolean mobDied = !mob.isAlive();
+                boolean playerDied = !target.isAlive();
+                
+                // Record for learning with mob entity for attribute correlation tracking
+                java.lang.reflect.Method recordMethod = behaviorAI.getClass().getMethod(
+                    "recordCombatOutcome", String.class, boolean.class, boolean.class, 
+                    mobStateClass, float.class, float.class, Mob.class
+                );
+                recordMethod.invoke(behaviorAI, mobId, playerDied, mobDied, finalState, 0.0f, 0.0f, mob);
+            } catch (Exception e) {
+                // Silently fail - don't break gameplay
+            }
         }
         
         /**
@@ -323,42 +373,60 @@ public abstract class MobAIEnhancementMixin {
          * VILLAGERS: Use persistent profile for consistent behavior (MCA or vanilla)
          */
         private void selectNextAction() {
-            if (target == null) return;
+            if (target == null || behaviorAI == null) return;
             
-            // Build current state
-            MobBehaviorAI.MobState state = new MobBehaviorAI.MobState(
-                mob.getHealth() / mob.getMaxHealth(),
-                target.getHealth() / target.getMaxHealth(),
-                (float) mob.distanceTo(target)
-            );
-            
-            state.isNight = !mob.level().isDay();
-            state.biome = mob.level().getBiome(mob.blockPosition()).toString();
-            state.combatTime = combatTicks / 20.0f;
-            
-            // Special abilities
-            if (mob instanceof Spider) {
-                state.canClimbWalls = true;
-            }
-            
-            // Get mob type
-            String mobType;
-            if (isVillager && persistentProfile != null) {
-                // Villagers (MCA or vanilla) use their permanent tactical profile
-                mobType = persistentProfile;
-            } else {
-                // Regular mobs use class-based type
-                mobType = mob.getClass().getSimpleName().toLowerCase();
-            }
-            
-            // AI selects action with contextual difficulty (pass mob entity for environmental context)
-            String previousAction = currentAction;
-            currentAction = behaviorAI.selectMobActionWithEntity(mobType, state, mobId, mob);
-            
-            // Track action in sequence (calculate reward based on health changes)
-            if (previousAction != null && !previousAction.equals(currentAction)) {
-                double reward = calculateActionReward();
-                behaviorAI.trackActionInSequence(mobId, previousAction, reward);
+            try {
+                // Build current state using reflection
+                Object state = mobStateConstructor.newInstance(
+                    mob.getHealth() / mob.getMaxHealth(),
+                    target.getHealth() / target.getMaxHealth(),
+                    (float) mob.distanceTo(target)
+                );
+                
+                // Set fields
+                java.lang.reflect.Field isNightField = mobStateClass.getField("isNight");
+                isNightField.set(state, !mob.level().isDay());
+                
+                java.lang.reflect.Field biomeField = mobStateClass.getField("biome");
+                biomeField.set(state, mob.level().getBiome(mob.blockPosition()).toString());
+                
+                java.lang.reflect.Field combatTimeField = mobStateClass.getField("combatTime");
+                combatTimeField.set(state, combatTicks / 20.0f);
+                
+                // Special abilities
+                if (mob instanceof Spider) {
+                    java.lang.reflect.Field canClimbField = mobStateClass.getField("canClimbWalls");
+                    canClimbField.set(state, true);
+                }
+                
+                // Get mob type
+                String mobType;
+                if (isVillager && persistentProfile != null) {
+                    // Villagers (MCA or vanilla) use their permanent tactical profile
+                    mobType = persistentProfile;
+                } else {
+                    // Regular mobs use class-based type
+                    mobType = mob.getClass().getSimpleName().toLowerCase();
+                }
+                
+                // AI selects action with contextual difficulty (pass mob entity for environmental context)
+                String previousAction = currentAction;
+                java.lang.reflect.Method selectMethod = behaviorAI.getClass().getMethod(
+                    "selectMobActionWithEntity", String.class, mobStateClass, String.class, Mob.class
+                );
+                currentAction = (String) selectMethod.invoke(behaviorAI, mobType, state, mobId, mob);
+                
+                // Track action in sequence (calculate reward based on health changes)
+                if (previousAction != null && !previousAction.equals(currentAction)) {
+                    double reward = calculateActionReward();
+                    java.lang.reflect.Method trackMethod = behaviorAI.getClass().getMethod(
+                        "trackActionInSequence", String.class, String.class, double.class
+                    );
+                    trackMethod.invoke(behaviorAI, mobId, previousAction, reward);
+                }
+            } catch (Exception e) {
+                // Silently fail - use default action
+                currentAction = "straight_charge";
             }
         }
         
