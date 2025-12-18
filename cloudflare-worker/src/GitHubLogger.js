@@ -27,6 +27,21 @@ export class GitHubLogger {
     this.baseUrl = `https://api.github.com/repos/${repo}/contents`;
   }
 
+  async fileExists(path) {
+    try {
+      const response = await fetch(`${this.baseUrl}/${path}`, {
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'MCA-AI-Federation'
+        }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Log a completed federation round
    * Called AFTER aggregation completes (side effect only)
@@ -39,21 +54,10 @@ export class GitHubLogger {
 
     // Avoid rewriting round artifacts (keeps GitHub history clean and prevents spam).
     // If the file already exists, treat this as success.
-    try {
-      const existingResponse = await fetch(`${this.baseUrl}/${filename}`, {
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'MCA-AI-Federation'
-        }
-      });
-
-      if (existingResponse.ok) {
-        console.log(`📝 GitHub: Round ${roundData.round} already logged (${filename}), skipping`);
-        return { skipped: true, filename };
-      }
-    } catch {
-      // If we can't check existence, continue and attempt the write.
+    const exists = await this.fileExists(filename);
+    if (exists) {
+      console.log(`📝 GitHub: Round ${roundData.round} already logged (${filename}), skipping`);
+      return { skipped: true, filename };
     }
 
     const tactics = roundData.tactics || {};
@@ -124,6 +128,52 @@ export class GitHubLogger {
       console.warn(`⚠️ GitHub round logging failed (non-critical): ${error?.message || error}`);
       throw error;
     }
+  }
+
+  /**
+   * Create a placeholder artifact for an unrecoverable round.
+   * This keeps the round index contiguous while being explicit that the
+   * original snapshot is missing.
+   */
+  async logMissingRound(roundNumber, details = {}) {
+    const round = Number.isFinite(roundNumber) ? Math.floor(roundNumber) : null;
+    if (!round || round < 1) throw new Error('Invalid round number');
+
+    const padded = String(round).padStart(6, '0');
+    const filename = `rounds/round-${padded}.json`;
+
+    const exists = await this.fileExists(filename);
+    if (exists) {
+      return { skipped: true, filename };
+    }
+
+    const now = new Date().toISOString();
+    const content = JSON.stringify({
+      schema: {
+        name: 'mca-ai-enhanced.federation.round',
+        version: 2,
+        description: 'Placeholder artifact for an unrecoverable federation round snapshot'
+      },
+      privacy: {
+        personalData: false
+      },
+      round,
+      timestamp: now,
+      missing: {
+        value: true,
+        reason: typeof details?.reason === 'string' ? details.reason : 'Snapshot not recorded at the time and cannot be reconstructed from current Worker state',
+        notes: Array.isArray(details?.notes) ? details.notes.slice(0, 20) : undefined
+      },
+      tactics: {},
+      metadata: {
+        loggedAt: now,
+        source: 'admin',
+        version: '3.0.0'
+      }
+    }, null, 2);
+
+    await this.writeFile(filename, content, `Mark round ${round} as missing`);
+    return { skipped: false, filename };
   }
 
   #buildMobTypeSummary(tacticsByMobType) {

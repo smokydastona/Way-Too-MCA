@@ -316,6 +316,56 @@ export default {
         });
       }
 
+      // Admin endpoint - create a placeholder artifact for an unrecoverable/missing round
+      // Requires ADMIN_TOKEN secret set in Cloudflare (Authorization: Bearer <token>)
+      if (url.pathname === '/admin/mark-missing-round' && request.method === 'POST') {
+        if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) {
+          return new Response(JSON.stringify({
+            error: 'GitHub not configured',
+            message: 'Set GITHUB_TOKEN secret and GITHUB_REPO var in wrangler.toml'
+          }), {
+            status: 503,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        if (!env.ADMIN_TOKEN) {
+          return new Response(JSON.stringify({
+            error: 'Admin ops not configured',
+            message: 'Set ADMIN_TOKEN as a Cloudflare secret to enable admin operations'
+          }), {
+            status: 503,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        const auth = request.headers.get('Authorization') || '';
+        const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : '';
+        if (!token || token !== env.ADMIN_TOKEN) {
+          return new Response(JSON.stringify({
+            error: 'Unauthorized',
+            message: 'Missing or invalid Authorization bearer token'
+          }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        const coordinatorReq = new Request('https://coordinator/coordinator/admin/mark-missing-round', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: await request.text()
+        });
+
+        const response = await coordinator.fetch(coordinatorReq);
+        const result = await response.json();
+
+        return new Response(JSON.stringify(result), {
+          status: response.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       // Deep analysis endpoint (privacy-safe)
       // Uses deterministic analytics + optional Workers AI summarization.
       if (url.pathname === '/api/analyze-tactics' && request.method === 'GET') {

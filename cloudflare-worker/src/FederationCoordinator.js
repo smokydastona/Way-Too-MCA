@@ -116,6 +116,10 @@ export class FederationCoordinator {
     if (path === '/coordinator/admin/backfill-current-global' && request.method === 'POST') {
       return await this.handleAdminBackfillCurrentGlobal(request);
     }
+
+    if (path === '/coordinator/admin/mark-missing-round' && request.method === 'POST') {
+      return await this.handleAdminMarkMissingRound(request);
+    }
     
     // Tier progression routes
     if (path === '/coordinator/tiers/upload' && request.method === 'POST') {
@@ -241,6 +245,71 @@ export class FederationCoordinator {
       globalModelRound: this.globalModel?.round || null,
       pendingRoundLogs: this.pendingRoundLogs?.length || 0,
       lastGitHubLogError: this.lastGitHubLogError || null
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  async handleAdminMarkMissingRound(request) {
+    if (!this.env.ADMIN_TOKEN) {
+      return new Response(JSON.stringify({
+        error: 'Admin ops not configured',
+        message: 'Set ADMIN_TOKEN as a Cloudflare secret to enable admin operations'
+      }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const auth = request.headers.get('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : '';
+    if (!token || token !== this.env.ADMIN_TOKEN) {
+      return new Response(JSON.stringify({
+        error: 'Unauthorized',
+        message: 'Missing or invalid Authorization bearer token'
+      }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!this.logger) {
+      return new Response(JSON.stringify({
+        error: 'GitHub logging not configured',
+        message: 'Set GITHUB_TOKEN and GITHUB_REPO to enable GitHub observability'
+      }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    let body = {};
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
+
+    const round = typeof body?.round === 'number' ? Math.floor(body.round) : null;
+    if (!round || round < 1) {
+      return new Response(JSON.stringify({
+        error: 'Invalid round',
+        message: 'Body must include { round: number } with round >= 1'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const reason = typeof body?.reason === 'string' ? body.reason : undefined;
+    const notes = Array.isArray(body?.notes) ? body.notes : undefined;
+
+    const result = await this.logger.logMissingRound(round, { reason, notes });
+    return new Response(JSON.stringify({
+      success: true,
+      round,
+      ...result
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
