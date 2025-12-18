@@ -109,7 +109,8 @@ public class CloudflareAPIClient {
     }
     
     /**
-     * Submit a learned tactic with bootstrap flag
+     * Submit a learned tactic with bootstrap flag (Legacy endpoint)
+     * New v3.0 worker uses /api/upload with FedAvgM aggregation
      * @param bootstrap If true, this is a first-encounter upload (bypasses round restrictions)
      */
     public boolean submitTactic(String mobType, String action, float reward, String outcome, float winRate, boolean bootstrap) {
@@ -120,49 +121,29 @@ public class CloudflareAPIClient {
             // Calculate tier based on win rate
             TacticTier tier = TacticTier.fromWinRate(winRate);
             
-            // Build JSON payload with merge metadata
+            // Build advanced payload for FedAvgM worker
+            JsonObject tactics = new JsonObject();
+            JsonObject tacticData = new JsonObject();
+            tacticData.addProperty("avgReward", reward);
+            tacticData.addProperty("count", 1);
+            tacticData.addProperty("successRate", winRate);
+            tactics.add(action, tacticData);
+            
             JsonObject payload = new JsonObject();
             payload.addProperty("mobType", mobType);
-            payload.addProperty("action", action);
-            payload.addProperty("reward", reward);
-            payload.addProperty("outcome", outcome);
-            payload.addProperty("winRate", winRate);
-            payload.addProperty("tier", tier.getName());
+            payload.addProperty("serverId", serverId);
+            payload.add("tactics", tactics);
             payload.addProperty("timestamp", System.currentTimeMillis());
-            payload.addProperty("serverId", serverId); // Unique server ID for conflict detection
-            payload.addProperty("sampleCount", 1); // Number of samples (for weighted averaging)
-            payload.addProperty("mergeStrategy", "weighted_average"); // How to handle conflicts
             if (bootstrap) {
-                payload.addProperty("bootstrap", true); // First-encounter upload flag
+                payload.addProperty("bootstrap", true);
             }
             
-            // Build tactics object for coordinator
-            JsonObject tactics = new JsonObject();
-            JsonObject actionData = new JsonObject();
-            actionData.addProperty("avgReward", reward);
-            actionData.addProperty("count", 1);
-            actionData.addProperty("successCount", outcome.equals("success") ? 1 : 0);
-            actionData.addProperty("successRate", winRate);
-            tactics.add(action, actionData);
+            String jsonPayload = gson.toJson(payload);
             
-            JsonObject coordinatorPayload = new JsonObject();
-            coordinatorPayload.addProperty("serverId", serverId);
-            coordinatorPayload.addProperty("mobType", mobType);
-            coordinatorPayload.add("tactics", tactics);
-            if (bootstrap) {
-                coordinatorPayload.addProperty("bootstrap", true);
-            }
-            
-            String jsonPayload = gson.toJson(coordinatorPayload);
-            
-            // Try GZIP compression if data is large enough
-            byte[] compressed = CompressionUtil.compress(jsonPayload);
-            String response;
-            
-            // Use new coordinator endpoint
-            response = sendPostRequest("api/upload", jsonPayload);
-            LOGGER.debug("Submitted tactic to coordinator: {} - {} (reward: {}, bootstrap: {})", 
-                mobType, action, reward, bootstrap);
+            // Use advanced FedAvgM endpoint
+            String response = sendPostRequest("api/upload", jsonPayload);
+            LOGGER.debug("Submitted tactic via FedAvgM: {} - {} (reward: {}, winRate: {})", 
+                mobType, action, reward, winRate);
             
             if (response != null) {
                 totalSubmissions++;
@@ -181,6 +162,58 @@ public class CloudflareAPIClient {
     }
     
     /**
+     * Upload replay buffer samples to Cloudflare Worker for global pooling
+     * Enables deep learning from shared experiences across all servers
+     * 
+     * @param mobType The mob type these experiences are from
+     * @param samples List of replay buffer samples (state, action, reward, nextState, done)
+     * @return true if upload successful
+     */
+    public boolean uploadReplayBuffer(String mobType, java.util.List<Map<String, Object>> samples) {
+        if (samples == null || samples.isEmpty()) {
+            return false;
+        }
+        
+        try {
+            JsonObject payload = new JsonObject();
+            payload.addProperty("mobType", mobType);
+            payload.addProperty("serverId", serverId);
+            
+            // Convert samples to JSON array
+            com.google.gson.JsonArray samplesArray = new com.google.gson.JsonArray();
+            for (Map<String, Object> sample : samples) {
+                JsonObject sampleJson = new JsonObject();
+                for (Map.Entry<String, Object> entry : sample.entrySet()) {
+                    if (entry.getValue() instanceof Number) {
+                        sampleJson.addProperty(entry.getKey(), (Number) entry.getValue());
+                    } else if (entry.getValue() instanceof Boolean) {
+                        sampleJson.addProperty(entry.getKey(), (Boolean) entry.getValue());
+                    } else {
+                        sampleJson.addProperty(entry.getKey(), String.valueOf(entry.getValue()));
+                    }
+                }
+                samplesArray.add(sampleJson);
+            }
+            payload.add("samples", samplesArray);
+            
+            String jsonPayload = gson.toJson(payload);
+            String response = sendPostRequest("api/upload-replay", jsonPayload);
+            
+            if (response != null) {
+                LOGGER.debug("Uploaded {} replay samples for {} to global pool", samples.size(), mobType);
+                return true;
+            } else {
+                LOGGER.warn("Failed to upload replay buffer for {}", mobType);
+                return false;
+            }
+            
+        } catch (Exception e) {
+            LOGGER.warn("Replay buffer upload error: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
      * Download global tactics from all servers (async)
      */
     public CompletableFuture<Map<String, Object>> downloadTacticsAsync() {
@@ -188,9 +221,9 @@ public class CloudflareAPIClient {
     }
     
     /**
-     * Download global tactics from GitHub repository (blocking)
-     * Downloads from: https://github.com/smokydastona/adaptive-ai-federation-logs
-     * Uses smart caching to reduce GitHub API calls
+     * Download global tactics from Cloudflare API (blocking)
+     * Cloudflare Worker uses FedAvgM aggregation weighted by spawn frequency
+     * Returns: aggregated tactics + specialized layers + replay samples
      * 
      * @return Map of mob types to tactic data, or empty map if failed
      */
