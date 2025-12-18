@@ -18,6 +18,12 @@ import java.util.*;
 public class MobBehaviorAI {
     private static final Logger LOGGER = LogUtils.getLogger();
     
+    // DIAGNOSTIC: Static initializer to verify this class loads
+    static {
+        System.out.println("=== MobBehaviorAI: Static initialization START ===");
+        System.out.println("=== If crash happens after this, com.minecraft.gancity.ml.* import is the problem ===");
+    }
+    
     // Advanced ML Systems
     private DoubleDQN doubleDQN;
     private PrioritizedReplayBuffer replayBuffer;

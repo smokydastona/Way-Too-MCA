@@ -29,6 +29,13 @@ public class GANCityMod {
     public static final String MODID = "adaptivemobai";
     public static final Logger LOGGER = LogUtils.getLogger();  // Changed to public for mixin access
     
+    // DIAGNOSTIC: Static initializer runs FIRST - if this doesn't log, class loading itself failed
+    static {
+        System.out.println("=== MCA AI Enhanced: Static initialization START ===");
+        System.out.println("=== If you see this but no 'FINISH', class loading failed ===");
+        LOGGER.info("=== MCA AI Enhanced: Static initialization START ===");
+    }
+    
     private static MobBehaviorAI mobBehaviorAI;
     private static VillagerDialogueAI villagerDialogueAI;
     private static boolean federationInitialized = false;
@@ -39,12 +46,17 @@ public class GANCityMod {
     private static long lastSaveTime = 0;
 
     public GANCityMod() {
+        System.out.println("=== MCA AI Enhanced: Constructor START ===");
+        LOGGER.info("=== MCA AI Enhanced: Constructor START ===");
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::commonSetup);
         MinecraftForge.EVENT_BUS.register(this);
+        System.out.println("=== MCA AI Enhanced: Constructor FINISH ===");
+        LOGGER.info("=== MCA AI Enhanced: Constructor FINISH ===");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
+        System.out.println("=== MCA AI Enhanced: commonSetup START ===");
         LOGGER.info("MCA AI Enhanced - Deferring initialization to avoid classloading deadlock");
         
         event.enqueueWork(() -> {

@@ -25,14 +25,23 @@ import java.util.EnumSet;
 @Mixin(Mob.class)
 public abstract class MobAIEnhancementMixin {
     
+    // DIAGNOSTIC: Static initializer to verify mixin class loads
+    static {
+        System.out.println("=== MobAIEnhancementMixin: Static initialization START ===");
+        System.out.println("=== If crash happens here, imports or static fields are the problem ===");
+    }
+    
     // CRITICAL: Lazy-load Ice and Fire check to avoid ModList.get() during static init
     // DO NOT use: private static final boolean ICE_AND_FIRE_LOADED = ModList.get().isLoaded("iceandfire");
     // That causes crash at "Compatibility level set to JAVA_17" - ModList not ready yet!
     private static Boolean iceAndFireLoaded = null;
     
     private static boolean isIceAndFireLoaded() {
+        System.out.println("=== MobAIEnhancementMixin: isIceAndFireLoaded() called ===");
         if (iceAndFireLoaded == null) {
+            System.out.println("=== MobAIEnhancementMixin: Calling ModList.get().isLoaded(iceandfire) ===");
             iceAndFireLoaded = ModList.get().isLoaded("iceandfire");
+            System.out.println("=== MobAIEnhancementMixin: Result = " + iceAndFireLoaded + " ===");
         }
         return iceAndFireLoaded;
     }
