@@ -671,9 +671,8 @@ export class FederationCoordinator {
           
           // Current weights for this mob type (post-update)
           currentWeights: this.getTopTactics(tacticalData.weights[mobType], 5),
-          
-          // Meta information
-          playerId: playerId || 'unknown',
+
+          // Meta information (privacy-safe)
           contributorCount: tacticalData.stats.contributors.size,
           totalEpisodesToDate: tacticalData.stats.totalEpisodes,
           totalSamplesToDate: tacticalData.stats.totalSamples

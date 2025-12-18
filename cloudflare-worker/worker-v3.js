@@ -90,7 +90,7 @@ export default {
 
       // Upload endpoint - route to coordinator
       if (url.pathname === '/api/upload' && request.method === 'POST') {
-        console.log("📥 MODEL UPLOAD FROM", request.headers.get("cf-connecting-ip"));
+        console.log("📥 MODEL UPLOAD");
         
         // Get coordinator instance (single global coordinator)
         const coordinatorId = env.FEDERATION_COORDINATOR.idFromName('global');

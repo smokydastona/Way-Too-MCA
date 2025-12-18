@@ -42,11 +42,27 @@ export class GitHubLogger {
       const mobTypeSummary = this.#buildMobTypeSummary(tactics);
       
       const content = JSON.stringify({
+        schema: {
+          name: 'mca-ai-enhanced.federation.round',
+          version: 1,
+          description: 'One file per federation round: metadata + full aggregated tactics snapshot'
+        },
+        privacy: {
+          personalData: false,
+          notes: [
+            'No player identifiers (UUID/name/IP) are stored.',
+            'No server identifiers are stored; only aggregate counts.'
+          ]
+        },
         round: roundData.round,
         timestamp: roundData.timestamp || timestamp,
         contributors: roundData.contributors,
         mobTypes: roundData.mobTypes || [],
         modelStats: roundData.modelStats || {},
+        aggregation: {
+          method: roundData.aggregationMethod || 'FedAvg',
+          workerVersion: '3.0.0'
+        },
         // Full global model snapshot (this is the important data)
         tactics,
         // Compact summary for quick human scanning
@@ -102,7 +118,6 @@ export class GitHubLogger {
       // Append to daily log file (JSONL format)
       const line = JSON.stringify({
         timestamp: new Date().toISOString(),
-        serverId: uploadData.serverId,
         mobType: uploadData.mobType,
         round: uploadData.round,
         bootstrap: uploadData.bootstrap || false
@@ -291,7 +306,6 @@ export class GitHubLogger {
         currentWeights: episodeData.currentWeights,
         
         // Meta
-        playerId: episodeData.playerId,
         contributorCount: episodeData.contributorCount,
         totalEpisodesToDate: episodeData.totalEpisodesToDate,
         totalSamplesToDate: episodeData.totalSamplesToDate
