@@ -15,6 +15,9 @@
 	#Enable AI-enhanced mob behavior
 	#When true: Mobs use machine learning to adapt tactics
 	#When false: Mobs use vanilla behavior
+	#NOTE: ML initialization auto-retries up to 5 times if DJL fails to load
+	#Retry schedule: 1 min, 2 min, 4 min, 8 min, 16 min (exponential backoff)
+	#This allows ML to recover from temporary issues (missing native libs, startup glitches)
 	enableMobAI = true
 	
 	#Enable AI-powered villager dialogue (requires MCA Reborn)

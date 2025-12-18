@@ -61,6 +61,14 @@ public class MobBehaviorAI {
     
     private boolean mlEnabled = true;  // Always enabled; uses rule-based fallback until DJL initializes
     private boolean initializationAttempted = false;  // Track if we've tried loading DJL
+    
+    // SMART RETRY: Don't give up on first failure - DJL might load later
+    private int initializationRetries = 0;
+    private static final int MAX_INIT_RETRIES = 5;  // Retry up to 5 times
+    private long lastInitAttemptTime = 0;
+    private static final long RETRY_DELAY_MS = 60000;  // Wait 1 minute between retries
+    private static final long RETRY_BACKOFF_MULTIPLIER = 2;  // Exponential backoff (1m, 2m, 4m, 8m, 16m)
+    
     private final Map<String, MobBehaviorProfile> behaviorProfiles = new HashMap<>();
     private final Map<String, MobState> lastStateCache = new HashMap<>();
     private final Map<String, String> lastActionCache = new HashMap<>();
@@ -249,10 +257,24 @@ public class MobBehaviorAI {
 
     /**
      * Initialize all advanced machine learning systems (lazy-loaded)
+     * SMART RETRY: Attempts initialization up to 5 times with exponential backoff
      */
     private void initializeAdvancedMLSystems() {
         if (doubleDQN != null) {
             return; // Already initialized successfully
+        }
+        
+        // SMART RETRY: Check if we should retry initialization
+        if (!initializationAttempted && initializationRetries > 0) {
+            long timeSinceLastAttempt = System.currentTimeMillis() - lastInitAttemptTime;
+            long requiredDelay = RETRY_DELAY_MS * (long)Math.pow(RETRY_BACKOFF_MULTIPLIER, initializationRetries - 1);
+            
+            if (timeSinceLastAttempt < requiredDelay) {
+                return;  // Not time to retry yet
+            }
+            
+            // Time to retry!
+            LOGGER.info("🔄 Retrying ML initialization (attempt {}/{})...", initializationRetries + 1, MAX_INIT_RETRIES);
         }
         
         try {
@@ -306,25 +328,53 @@ public class MobBehaviorAI {
             // SUCCESS: ML fully initialized
             mlEnabled = true;
             String mlSystems = buildMLSystemsString();
-            LOGGER.info("✅ Advanced ML systems initialized - {}", mlSystems);
+            
+            // Log success with retry context
+            if (initializationRetries > 0) {
+                LOGGER.info("✅ ML initialization RECOVERED after {} failed attempt(s)!", initializationRetries);
+                LOGGER.info("✅ Advanced ML systems now active - {}", mlSystems);
+            } else {
+                LOGGER.info("✅ Advanced ML systems initialized - {}", mlSystems);
+            }
+            
             LOGGER.info("✅ Tactical system enabled - mobs will learn high-level combat patterns");
-            initializationAttempted = true;
+            initializationAttempted = true;  // Mark as permanently successful
+            initializationRetries = 0;  // Reset retry counter
         } catch (Throwable t) {  // CRITICAL: Catch Throwable to handle native library failures
-            // Permanently disable ML if DJL fails (common on servers without native libs)
-            mlEnabled = false;
+            // SMART RETRY: Don't permanently disable - schedule retry with exponential backoff
+            mlEnabled = false;  // Temporarily disable until retry succeeds
             doubleDQN = null;
             replayBuffer = null;
             multiAgent = null;
             performanceOptimizer = null;
             tacticalAggregator = null;
-            initializationAttempted = true;
             
-            if (t instanceof ClassNotFoundException) {
-                LOGGER.info("❌ DJL not available, using rule-based AI only (this is normal for development)");
+            initializationRetries++;
+            lastInitAttemptTime = System.currentTimeMillis();
+            
+            if (initializationRetries >= MAX_INIT_RETRIES) {
+                // After max retries, permanently give up
+                initializationAttempted = true;
+                if (t instanceof ClassNotFoundException) {
+                    LOGGER.warn("❌ DJL not available after {} attempts - PERMANENTLY disabled ML (install PyTorch native libs to enable)", MAX_INIT_RETRIES);
+                } else {
+                    LOGGER.error("❌ ML initialization failed {} times - PERMANENTLY disabled. Check logs for native library errors.", MAX_INIT_RETRIES, t);
+                }
+                LOGGER.info("ℹ️  Mod will use rule-based AI only (no machine learning)");
             } else {
-                LOGGER.error("❌ Failed to initialize ML systems (native library issue?), permanently disabled ML. Using rule-based fallback only.", t);
+                // Calculate next retry delay with exponential backoff
+                long retryDelayMs = RETRY_DELAY_MS * (long)Math.pow(RETRY_BACKOFF_MULTIPLIER, initializationRetries - 1);
+                long retryDelayMinutes = retryDelayMs / 60000;
+                
+                if (t instanceof ClassNotFoundException) {
+                    LOGGER.info("ℹ️  DJL not available (attempt {}/{}) - will retry in {} minute(s)", 
+                        initializationRetries, MAX_INIT_RETRIES, retryDelayMinutes);
+                } else {
+                    LOGGER.warn("⚠️  ML init failed (attempt {}/{}) - will retry in {} minute(s): {}", 
+                        initializationRetries, MAX_INIT_RETRIES, retryDelayMinutes, t.getMessage());
+                }
+                LOGGER.info("ℹ️  Using rule-based AI temporarily until ML recovers");
             }
-            LOGGER.info("ℹ️  Mod will continue with rule-based AI (no ML features)");
         }
     }
     
