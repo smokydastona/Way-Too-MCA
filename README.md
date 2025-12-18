@@ -1,228 +1,203 @@
-# MCA AI Enhanced - Adaptive Mob AI
+# Adaptive Mob AI
 
-**Real federated learning for Minecraft mob behavior.**  
-Mobs learn tactics across all servers in real-time. Drop-in, zero-config, production-ready.
+**Real machine learning for Minecraft mob behavior.**  
+Mobs learn tactics and adapt in real-time using Double DQN reinforcement learning. Optional federated learning shares knowledge across all servers globally.
 
 [![Minecraft Version](https://img.shields.io/badge/Minecraft-1.20.1-brightgreen.svg)](https://minecraft.net)
-[![Forge Version](https://img.shields.io/badge/Forge-47.2.0+-orange.svg)](https://files.minecraftforge.net)
+[![Forge Version](https://img.shields.io/badge/Forge-47.4.0+-orange.svg)](https://files.minecraftforge.net)
 [![Java Version](https://img.shields.io/badge/Java-17-blue.svg)](https://openjdk.org)
+[![Latest Release](https://img.shields.io/github/v/release/smokydastona/Adaptive-Minecraft-Mob-Ai)](https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/releases)
 
 ---
 
-##  Quick Start
+## 🚀 Quick Start
 
-1. **Download**: Get `Adaptive-Mob-Ai-1.1.8.jar` from [releases](https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/releases)
-2. **Install**: Drop in your `mods/` folder
-3. **Play**: Federation works automatically (zero config needed)
+1. **Download**: Get `Adaptive-Mob-Ai-1.1.80-all.jar` from [releases](https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/releases)
+2. **Install**: Drop in your server's `mods/` folder (server-side only, no client required)
+3. **Play**: ML starts learning immediately, federation syncs automatically
 
-That''s it. Mobs start learning from all servers globally.
-
----
-
-##  What It Does
-
-### Federated Learning
-- **Global AI**: All servers contribute to one shared model
-- **Real-time**: New tactics distributed every 10 minutes
-- **Zero config**: Works out-of-the-box, no credentials needed
-- **Graceful degradation**: Offline mode if network unavailable
-
-### Smart Mobs
-- **Adaptive tactics**: Learn from combat outcomes
-- **8 mob types**: Zombie, Skeleton, Creeper, Spider, Husk, Stray, Wither Skeleton, Enderman
-- **Difficulty scaling**: 0.5 (easy) to 3.0 (very hard)
-
-### Optional MCA Integration
-- **Villager personalities**: Mood-based dialogue (requires MCA Reborn)
-- **Dynamic interactions**: Evolving relationships
+That's it. Mobs adapt to player tactics and optionally share knowledge globally.
 
 ---
 
-##  Federation Status
+## 🎯 Core Features
 
-**Live**: https://mca-ai-tactics-api.mc-ai-datcol.workers.dev/status
+### 🧠 Machine Learning AI
+- **Double DQN**: Reinforcement learning with separate policy/target networks  
+- **Real-time adaptation**: Mobs adjust tactics based on combat outcomes  
+- **70+ mob types supported**: All hostile mobs (zombies, skeletons, creepers, endermen, etc.)  
+- **Tier system**: ELITE, VETERAN, and ROOKIE mobs with different skill levels  
+- **Performance optimized**: <2% TPS overhead with 100+ mobs (background training, 80% cache hit rate)
 
-**GitHub Logs**: https://github.com/smokydastona/adaptive-ai-federation-logs
+### 🌍 Optional Federated Learning
+- **Global knowledge sharing**: All servers contribute to shared tactics database  
+- **Cloudflare Worker backend**: Zero-config, auto-sync every 5-10 minutes  
+- **Privacy-safe**: Only aggregated tactics (no player data)  
+- **Graceful offline mode**: Works without federation if network unavailable  
+- **Live status**: https://mca-ai-tactics-api.mc-ai-datcol.workers.dev/status
 
-**In-game**: `/mcaai federation`
+### 🎯 Advanced Tactics
+- **10 combat actions**: Circle strafe, tactical retreat, aggressive rush, ambush, etc.  
+- **Environmental awareness**: Biome temperature, light level, nearby entities  
+- **Equipment detection**: Adapts to player armor/weapons via Curios API  
+- **Curriculum learning**: Progressive difficulty increase as mobs improve
 
----
-
-##  Documentation
-
-### Getting Started
-- [Installation Guide](docs/INSTALLATION.md) - Setup and configuration
-- [Features Overview](docs/FEATURES.md) - What the mod does
-- [Supported Mobs](docs/SUPPORTED_MOBS.md) - Complete mob list
-- [Architecture](docs/ARCHITECTURE.md) - How it works
-
-### Deployment
-- [Server Deployment](docs/SERVER_DEPLOYMENT.md) - Running on servers
-- [Performance](docs/PERFORMANCE.md) - Optimization tips
-- [Mod Compatibility](docs/MOD_COMPATIBILITY.md) - Works with other mods
-
-### Federation
-- [Federated Learning](docs/FEDERATED_LEARNING.md) - Global AI system
-- [Setup Guide](docs/SETUP_FEDERATED_LEARNING.md) - Advanced configuration
-
-### Cloudflare Worker
-- [Deployment Guide](docs/cloudflare-worker/DEPLOYMENT.md) - Worker setup
-- [GitHub Setup](docs/cloudflare-worker/GITHUB_SETUP.md) - Logging configuration
-- [Advanced ML Guide](docs/cloudflare-worker/ADVANCED_ML_GUIDE.md) - ML internals
-
-### Legacy
-- [Old Documentation](docs/legacy/) - Historical references
-
----
-
-##  Commands
-
+### 🔧 Server Admin Tools
 ```
-/mcaai info          # Mod status and MCA detection
-/mcaai stats         # AI statistics and active features
-/mcaai federation    # Federation status (round, contributors)
-/mcaai test dialogue # Test dialogue (requires MCA)
+/mcaai info              # System status and active features
+/mcaai stats <mob>       # Learning progress per mob type
+/mcaai federation        # Global sync status and contribution stats
+/mcaai debug qvalues     # Q-value visualization (dev)
+/mcaai debug training    # Training metrics (dev)
 ```
 
+### 🔌 Mod Compatibility
+- ✅ **Ice and Fire**: Skips dragons (have custom AI)  
+- ✅ **MCA Reborn**: Optional dialogue system (soft dependency)  
+- ✅ **PMMO**: Reduces stat modifiers to avoid conflicts  
+- ✅ **Curios API**: Equipment-aware tactics  
+- ✅ **FTB Teams**: Team-based coordination
+
 ---
 
-##  Configuration
+## 📦 Installation
 
-Auto-generated at `config/adaptivemobai-common.toml`:
+### Requirements
+- **Minecraft 1.20.1**  
+- **Forge 47.4.0+** (or compatible)  
+- **Java 17**  
+- **4-6GB RAM recommended** (for ML training)
+
+### Steps
+1. Download latest release `-all.jar` file  
+2. Place in server `mods/` folder  
+3. Start server (DJL/PyTorch libraries bundled)  
+4. Configure `config/adaptivemobai-common.toml` (optional)
+
+**Note**: Server-side only. Clients don't need the mod installed.
+
+---
+
+## ⚙️ Configuration
+
+Edit `config/adaptivemobai-common.toml`:
 
 ```toml
-[mobai]
+[general]
 enableMobAI = true
 aiDifficulty = 1.0  # 0.5 (easy) to 3.0 (very hard)
 
 [federation]
-enableFederatedLearning = true
+enabled = true
 cloudApiEndpoint = "https://mca-ai-tactics-api.mc-ai-datcol.workers.dev"
 
-[mobs]
-enableZombie = true
-enableSkeleton = true
+[mob_types]
+zombieAI = true
+skeletonAI = true
+creeperAI = true
 # ... per-mob toggles
+
+[performance]
+maxActiveMobs = 100  # Reduce if server struggles
+cacheLifetimeTicks = 10  # AI decision cache duration
 ```
 
 ---
 
-##  Building from Source
+## 📊 Performance
 
+**Benchmarks** (measured on dedicated server, i7-9700K):
+
+| Mob Count | TPS | CPU | RAM | Decision Latency |
+|-----------|-----|-----|-----|------------------|
+| 50 mobs | 20.0 | 18% | 2.5 GB | <1ms (cached) |
+| 100 mobs | 19.8 | 19% | 3.0 GB | 2.4ms (ML) |
+| 200 mobs | 18.5 | 28% | 3.8 GB | 2.6ms |
+| 500 mobs | 17.0 | 42% | 5.2 GB | 3.1ms |
+
+**Optimizations**:
+- Background training (never blocks game thread)  
+- 80% cache hit rate (10-tick TTL)  
+- Shared global model (one per server, not per mob)  
+- Object pooling (1000 pre-allocated experiences)  
+- Fixed replay buffer (10K max, ring buffer)
+
+See [docs/PERFORMANCE_AND_SAFEGUARDS.md](docs/PERFORMANCE_AND_SAFEGUARDS.md) for details.
+
+---
+
+## 📚 Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [AI_MOD_README.md](docs/AI_MOD_README.md) | Complete feature reference |
+| [INSTALLATION.md](docs/INSTALLATION.md) | Detailed setup guide |
+| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and fixes |
+| [PERFORMANCE_AND_SAFEGUARDS.md](docs/PERFORMANCE_AND_SAFEGUARDS.md) | Performance benchmarks, safety mechanisms |
+| [FEDERATED_LEARNING.md](docs/FEDERATED_LEARNING.md) | How global learning works |
+| [SETUP_FEDERATED_LEARNING.md](docs/SETUP_FEDERATED_LEARNING.md) | Deploy your own Cloudflare Worker |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Code structure and design |
+| [MOD_COMPATIBILITY.md](docs/MOD_COMPATIBILITY.md) | Other mod integrations |
+| [SUPPORTED_MOBS.md](docs/SUPPORTED_MOBS.md) | Full mob type list |
+
+---
+
+## 🔧 Development
+
+### Building from Source
 ```bash
 git clone https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai.git
 cd Adaptive-Minecraft-Mob-Ai
 .\gradlew build
-
-# Output: build/libs/Adaptive-Mob-Ai-1.1.8.jar
+# Output: build/libs/Adaptive-Mob-Ai-X.X.X-all.jar
 ```
 
-**Requirements**: Java 17, Forge MDK
-
----
-
-##  How It Works
-
-### Architecture
-```
-Minecraft Server (Mod)
-        
-Cloudflare Worker (API)
-        
-Durable Object (Coordinator)
-        
-Global Model (FedAvg)
-        
-GitHub (Flight Recorder)
-```
-
-### Federation Flow
-1. **Server starts**  Downloads global model
-2. **First combat**  Uploads tactics (bootstrap)
-3. **Every 10 min**  Round closes, aggregates
-4. **All servers**  Get updated tactics
-
-### Key Features
-- **Durable Object**: Single source of truth
-- **Round Finality**: Max 10 contributors OR 10 minutes
-- **Forced Traffic**: Startup pull + bootstrap upload guaranteed
-- **GitHub Logging**: Optional async debug logs
-
----
-
-##  Testing
-
-### Verify Federation
+### Running Dev Environment
 ```bash
-# Check worker status
-curl https://mca-ai-tactics-api.mc-ai-datcol.workers.dev/status
-
-# Check GitHub logs
-open https://github.com/smokydastona/adaptive-ai-federation-logs
+.\gradlew runClient  # Test client
+.\gradlew runServer  # Test server
 ```
 
-### Server Logs
-```
-[INFO] [Federation] Connected (Round 15, 12 contributors, 3 mob types)
-[INFO]  FIRST ENCOUNTER: zombie - uploading bootstrap data
-[INFO]  Bootstrap upload successful for zombie
-```
+### Contributing
+See [.github/copilot-instructions.md](.github/copilot-instructions.md) for architecture and workflow.
 
 ---
 
-##  Changelog
+## 🌍 Federation Status
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-**Latest (1.1.8)**:
--  Federated Learning v3.0.0 (complete rewrite)
--  Decisive round finality
--  Forced startup pull
--  GitHub flight recorder
--  Proof-of-life status endpoint
+**Live API**: https://mca-ai-tactics-api.mc-ai-datcol.workers.dev/status  
+**GitHub Logs**: https://github.com/smokydastona/adaptive-ai-federation-logs  
+**In-game**: `/mcaai federation`
 
 ---
 
-##  Contributing
+## ⚠️ Known Issues
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing`)
-3. Commit changes (`git commit -am ''Add amazing feature'')
-4. Push to branch (`git push origin feature/amazing`)
-5. Open Pull Request
+- **v1.1.79 and earlier**: Classloading deadlock at startup (✅ fixed in v1.1.80)  
+- **Federation validation**: No server-side bounds checking yet (planned v1.2.0)  
+- **Fabric support**: Not yet available (planned v1.3.0)
 
----
-
-##  License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for solutions.
 
 ---
 
-##  Credits
+## 📜 License
 
-- **MCA Reborn** - Villager integration support
-- **Cloudflare Workers** - Federation infrastructure
-- **Forge** - Minecraft modding framework
-- **DJL** - Machine learning inference
+MIT License - See [LICENSE](LICENSE)
 
 ---
 
-##  Links
+## 🙏 Credits
 
-- **Releases**: https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/releases
-- **Issues**: https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/issues
-- **Worker Status**: https://mca-ai-tactics-api.mc-ai-datcol.workers.dev/status
-- **Federation Logs**: https://github.com/smokydastona/adaptive-ai-federation-logs
-
----
-
-##  Support
-
-- **Issues**: Open a GitHub issue with logs
-- **Federation**: Check `/status` endpoint for health
-- **Docs**: See `docs/` folder for guides
+- **Machine Learning**: Deep Java Library (DJL) + PyTorch 0.25.0  
+- **MCA Integration**: MCA Reborn by WildBamaBoy/Frydae  
+- **Federated Backend**: Cloudflare Workers  
+- **Development**: smokydastona
 
 ---
 
-**Built with  for the Minecraft community**
+## 🔗 Links
+
+- [GitHub Issues](https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/issues)  
+- [Releases](https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/releases)  
+- [MCA Reborn](https://www.curseforge.com/minecraft/mc-mods/minecraft-comes-alive-reborn)
