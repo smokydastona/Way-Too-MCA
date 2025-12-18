@@ -248,11 +248,15 @@ public class FederatedLearning {
             Map<String, Object> tacticsData = apiClient.downloadTactics();
             
             if (tacticsData != null && !tacticsData.isEmpty()) {
-                applyGlobalTactics(tacticsData);
+                boolean applied = applyGlobalTactics(tacticsData);
                 lastPullTime = currentTime;
                 totalDataPointsDownloaded++;
                 
-                LOGGER.info("Successfully downloaded and applied global tactics");
+                if (applied) {
+                    LOGGER.info("Successfully downloaded and applied global tactics");
+                } else {
+                    LOGGER.warn("Downloaded global tactics but none were applied (invalid/empty/unsupported format)");
+                }
             } else {
                 LOGGER.warn("No global tactics available from API");
             }
@@ -353,10 +357,10 @@ public class FederatedLearning {
      * ✅ HARDENED: Validates all data for mathematical consistency before applying
      */
     @SuppressWarnings("unchecked")
-    private void applyGlobalTactics(Map<String, Object> tacticsData) {
+    private boolean applyGlobalTactics(Map<String, Object> tacticsData) {
         try {
             Map<String, Object> tactics = (Map<String, Object>) tacticsData.get("tactics");
-            if (tactics == null) return;
+            if (tactics == null) return false;
             
             int totalTacticsLoaded = 0;
             int totalTacticsRejected = 0;
@@ -379,9 +383,26 @@ public class FederatedLearning {
                     continue;
                 }
                 
-                List<Map<String, Object>> tacticList = (List<Map<String, Object>>) mobData.get("tactics");
-                if (tacticList != null && !tacticList.isEmpty()) {
-                    LOGGER.debug("Received {} global tactics for {} ({} validated)", 
+                Object tacticsObj = mobData.get("tactics");
+                List<Map<String, Object>> tacticList = new ArrayList<>();
+                if (tacticsObj instanceof List) {
+                    tacticList = (List<Map<String, Object>>) tacticsObj;
+                } else if (tacticsObj instanceof Map) {
+                    // Support legacy/alternate schema: tactics as { action: {..tacticData..}, ... }
+                    Map<String, Object> tacticsMap = (Map<String, Object>) tacticsObj;
+                    for (Map.Entry<String, Object> tacticEntry : tacticsMap.entrySet()) {
+                        if (!(tacticEntry.getValue() instanceof Map)) {
+                            continue;
+                        }
+                        Map<String, Object> tacticData = (Map<String, Object>) tacticEntry.getValue();
+                        // Ensure action is present for downstream validation/processing
+                        tacticData.putIfAbsent("action", tacticEntry.getKey());
+                        tacticList.add(tacticData);
+                    }
+                }
+
+                if (!tacticList.isEmpty()) {
+                    LOGGER.debug("Received {} global tactics for {} ({} validated)",
                         tacticList.size(), mobType, validTacticsCount);
                     
                     // Store tactics in global pool for cross-mob learning
@@ -453,13 +474,16 @@ public class FederatedLearning {
                 if (Math.random() < EXPLORATION_RATE) {
                     reintroducePrunedTactics(tacticsData);
                 }
+
+                return true;
             } else if (totalTacticsRejected > 0) {
                 LOGGER.error("❌ ALL {} tactics rejected due to validation failures - federation data is poisoned!", 
                     totalTacticsRejected);
             }
-            
+            return false;
         } catch (Exception e) {
             LOGGER.error("Error applying global tactics: {}", e.getMessage());
+            return false;
         }
     }
     
