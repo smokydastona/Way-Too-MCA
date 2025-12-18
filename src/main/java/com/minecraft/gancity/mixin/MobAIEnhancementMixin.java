@@ -25,8 +25,17 @@ import java.util.EnumSet;
 @Mixin(Mob.class)
 public abstract class MobAIEnhancementMixin {
     
-    // Ice and Fire compatibility check
-    private static final boolean ICE_AND_FIRE_LOADED = ModList.get().isLoaded("iceandfire");
+    // CRITICAL: Lazy-load Ice and Fire check to avoid ModList.get() during static init
+    // DO NOT use: private static final boolean ICE_AND_FIRE_LOADED = ModList.get().isLoaded("iceandfire");
+    // That causes crash at "Compatibility level set to JAVA_17" - ModList not ready yet!
+    private static Boolean iceAndFireLoaded = null;
+    
+    private static boolean isIceAndFireLoaded() {
+        if (iceAndFireLoaded == null) {
+            iceAndFireLoaded = ModList.get().isLoaded("iceandfire");
+        }
+        return iceAndFireLoaded;
+    }
     
     /**
      * Inject AI-enhanced behavior when mob registers goals
@@ -48,7 +57,7 @@ public abstract class MobAIEnhancementMixin {
             Mob mob = (Mob)(Object)this;
             
             // Ice and Fire compatibility - skip their mobs entirely
-            if (ICE_AND_FIRE_LOADED) {
+            if (isIceAndFireLoaded()) {
                 String entityId = mob.getType().toString();
                 if (entityId.contains("iceandfire:")) {
                     return; // Don't modify Ice and Fire entity AI
