@@ -289,34 +289,63 @@ public class CloudflareAPIClient {
             return new Object2ObjectOpenHashMap<>();
         }
         
-        LOGGER.debug("Cache miss, downloading from GitHub (miss #{})", cacheMisses);
+        LOGGER.debug("Cache miss, downloading from Cloudflare Worker (miss #{})", cacheMisses);
         
         try {
-            // Download directly from GitHub raw content
-            String[] mobTypes = {"zombie", "skeleton", "creeper", "spider", "husk", "stray", "wither_skeleton", "enderman"};
+            // Fetch the current global model from the Worker (source of truth).
+            // NOTE: GitHub is observability only; clients should never read from it.
+            String response = sendGetRequest("api/global");
+            if (response == null || response.isEmpty()) {
+                failedDownloads++;
+                LOGGER.warn("No global tactics available from API");
+                return new Object2ObjectOpenHashMap<>();
+            }
+
+            JsonObject json = JsonParser.parseString(response).getAsJsonObject();
+            JsonObject tacticsJson = json.has("tactics") && json.get("tactics").isJsonObject()
+                ? json.getAsJsonObject("tactics")
+                : null;
+
+            if (tacticsJson == null || tacticsJson.entrySet().isEmpty()) {
+                failedDownloads++;
+                LOGGER.warn("No global tactics available from API");
+                return new Object2ObjectOpenHashMap<>();
+            }
+
             Map<String, Object> tacticsData = new Object2ObjectOpenHashMap<>();
-            tacticsData.put("version", "1.0.0");
+            tacticsData.put("version", "3.0.0");
             tacticsData.put("timestamp", System.currentTimeMillis());
-            
-            Map<String, Object> tactics = new Object2ObjectOpenHashMap<>();
-            
-            for (String mobType : mobTypes) {
-                String githubUrl = "https://raw.githubusercontent.com/smokydastona/adaptive-ai-federation-logs/main/federated-data/" 
-                    + mobType + "-tactics.json";
-                
+
+            if (json.has("round") && json.get("round").isJsonPrimitive()) {
                 try {
-                    String mobData = downloadFromGitHub(githubUrl);
-                    if (mobData != null) {
-                        Map<String, Object> mobTactics = gson.fromJson(mobData, Map.class);
-                        tactics.put(mobType, mobTactics);
-                    }
-                } catch (Exception e) {
-                    LOGGER.debug("No tactics found for {} on GitHub: {}", mobType, e.getMessage());
+                    tacticsData.put("round", json.get("round").getAsInt());
+                } catch (Exception ignored) {
+                    // Non-critical
                 }
             }
-            
+
+            if (json.has("contributors") && json.get("contributors").isJsonPrimitive()) {
+                try {
+                    tacticsData.put("server_count", json.get("contributors").getAsInt());
+                } catch (Exception ignored) {
+                    // Non-critical
+                }
+            }
+
+            Map<String, Object> tactics = new Object2ObjectOpenHashMap<>();
+            for (Map.Entry<String, JsonElement> mobEntry : tacticsJson.entrySet()) {
+                try {
+                    Map<String, Object> mobTactics = gson.fromJson(mobEntry.getValue(), Map.class);
+                    if (mobTactics != null && !mobTactics.isEmpty()) {
+                        tactics.put(mobEntry.getKey(), mobTactics);
+                    }
+                } catch (Exception e) {
+                    LOGGER.debug("Failed to parse tactics for {}: {}", mobEntry.getKey(), e.getMessage());
+                }
+            }
+
             tacticsData.put("tactics", tactics);
-            
+
             if (!tactics.isEmpty()) {
                 totalDownloads++;
                 lastSuccessfulSync = System.currentTimeMillis();
@@ -324,44 +353,19 @@ public class CloudflareAPIClient {
                 // Cache the result
                 cache.put("global_tactics", tacticsData);
                 
-                LOGGER.info("Downloaded global tactics from GitHub - {} mob types (cached for 5min)", tactics.size());
+                LOGGER.info("Downloaded global tactics from API - {} mob types (cached for 5min)", tactics.size());
                 return tacticsData;
             } else {
                 failedDownloads++;
-                LOGGER.warn("No tactics data available on GitHub yet");
+                LOGGER.warn("No global tactics available from API");
                 return new Object2ObjectOpenHashMap<>();
             }
             
         } catch (Exception e) {
             failedDownloads++;
-            LOGGER.warn("Failed to download tactics from GitHub: {}", e.getMessage());
+            LOGGER.warn("Failed to download tactics from API: {}", e.getMessage());
             return new Object2ObjectOpenHashMap<>();
         }
-    }
-    
-    /**
-     * Download raw JSON from GitHub
-     */
-    private String downloadFromGitHub(String url) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "MCA-AI-Enhanced/1.0");
-        conn.setConnectTimeout(connectTimeoutMs);
-        conn.setReadTimeout(readTimeoutMs);
-        
-        int responseCode = conn.getResponseCode();
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) {
-                    response.append(line);
-                }
-                return response.toString();
-            }
-        }
-        return null;
     }
     
     /**
