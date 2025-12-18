@@ -135,7 +135,7 @@ public class TacticDataValidator {
             }
             
             // Rule 7: Validate totalReward consistency
-            float calculatedTotal Reward = avgReward * count;
+            float calculatedTotalReward = avgReward * count;
             if (Math.abs(totalReward - calculatedTotalReward) > EPSILON * count) {
                 LOGGER.warn("Total reward mismatch for {}: {} - stored={}, calculated={}",
                     mobType, action, totalReward, calculatedTotalReward);
