@@ -953,7 +953,7 @@ async function compareBatches(env, mobType, currentAnalysis) {
 
 /**
  * Sync tactics data to GitHub repository for persistence
- * Repository: smokydastona/Minecraft-machine-learned-collected
+ * Repository: smokydastona/adaptive-ai-federation-logs
  * Path: federated-data/{mobType}-tactics.json
  */
 async function syncToGitHub(env, mobType, tacticsData, batchReport) {
@@ -964,7 +964,7 @@ async function syncToGitHub(env, mobType, tacticsData, batchReport) {
 
   try {
     const owner = 'smokydastona';
-    const repo = 'Minecraft-machine-learned-collected';
+    const repo = 'adaptive-ai-federation-logs';
     const branch = 'main';
     const path = `federated-data/${mobType}-tactics.json`;
     

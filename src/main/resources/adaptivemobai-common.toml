@@ -218,5 +218,5 @@
 	
 	#LEGACY OPTIONS (deprecated - ignore these)
 	#Git repository URL - only used if cloudApiEndpoint is removed
-	federatedRepoUrl = "git@github.com:smokydastona/Minecraft-machine-learned-collected.git"
+	federatedRepoUrl = "git@github.com:smokydastona/adaptive-ai-federation-logs.git"
 

@@ -189,7 +189,7 @@ public class CloudflareAPIClient {
     
     /**
      * Download global tactics from GitHub repository (blocking)
-     * Downloads from: https://github.com/smokydastona/Minecraft-machine-learned-collected
+     * Downloads from: https://github.com/smokydastona/adaptive-ai-federation-logs
      * Uses smart caching to reduce GitHub API calls
      * 
      * @return Map of mob types to tactic data, or empty map if failed
@@ -225,7 +225,7 @@ public class CloudflareAPIClient {
             Map<String, Object> tactics = new Object2ObjectOpenHashMap<>();
             
             for (String mobType : mobTypes) {
-                String githubUrl = "https://raw.githubusercontent.com/smokydastona/Minecraft-machine-learned-collected/main/federated-data/" 
+                String githubUrl = "https://raw.githubusercontent.com/smokydastona/adaptive-ai-federation-logs/main/federated-data/" 
                     + mobType + "-tactics.json";
                 
                 try {
