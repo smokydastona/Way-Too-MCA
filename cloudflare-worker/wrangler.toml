@@ -36,6 +36,7 @@ GITHUB_BRANCH = "main"
 # Secrets (set with: wrangler secret put GITHUB_TOKEN)
 # GITHUB_TOKEN = "your-github-personal-access-token"
 # ADMIN_TOKEN = "random-long-secret"  # Protects /admin/reset-round (Authorization: Bearer <token>)
+# ANALYSIS_TOKEN = "random-long-secret"  # Optional: protects /api/analyze-tactics (Authorization: Bearer <token>)
 # 
 # To enable GitHub logging (observability only):
 # 1. Create GitHub Personal Access Token with 'repo' scope

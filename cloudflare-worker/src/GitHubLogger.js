@@ -396,9 +396,8 @@ export class GitHubLogger {
         tacticsUsed: episodeData.tacticsUsed,
         dominantTactic: episodeData.dominantTactic,
         currentWeights: episodeData.currentWeights,
-        
-        // Meta
-        contributorCount: episodeData.contributorCount,
+
+        // Meta (aggregate-only)
         totalEpisodesToDate: episodeData.totalEpisodesToDate,
         totalSamplesToDate: episodeData.totalSamplesToDate
       });

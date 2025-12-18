@@ -163,6 +163,8 @@ export class FederationCoordinator {
       await this.state.storage.delete('models');
       await this.state.storage.delete('globalModel');
       await this.state.storage.delete('lastAggregation');
+      await this.state.storage.delete('tacticalData');
+      await this.state.storage.delete('tierData');
     }
 
     // Reset in-memory state
@@ -682,7 +684,6 @@ export class FederationCoordinator {
         damageTaken,
         durationTicks,
         tacticsUsed,
-        playerId,
         timestamp
       } = episode;
       
@@ -699,8 +700,7 @@ export class FederationCoordinator {
         weights: {},
         stats: {
           totalEpisodes: 0,
-          totalSamples: 0,
-          contributors: new Set()
+          totalSamples: 0
         }
       };
       
@@ -714,7 +714,6 @@ export class FederationCoordinator {
         damageTaken,
         durationTicks,
         tacticsUsed,
-        playerId: playerId || 'unknown',
         timestamp: timestamp || Date.now()
       };
       
@@ -726,9 +725,6 @@ export class FederationCoordinator {
       // Update statistics
       tacticalData.stats.totalEpisodes++;
       tacticalData.stats.totalSamples += sampleCount;
-      if (playerId) {
-        tacticalData.stats.contributors.add(playerId);
-      }
       
       // Aggregate into tactical weights using exponential moving average
       const LEARNING_RATE = 0.05;
@@ -783,7 +779,6 @@ export class FederationCoordinator {
           currentWeights: this.getTopTactics(tacticalData.weights[mobType], 5),
 
           // Meta information (privacy-safe)
-          contributorCount: tacticalData.stats.contributors.size,
           totalEpisodesToDate: tacticalData.stats.totalEpisodes,
           totalSamplesToDate: tacticalData.stats.totalSamples
         };
@@ -803,7 +798,7 @@ export class FederationCoordinator {
             totalEpisodes: tacticalData.stats.totalEpisodes,
             totalSamples: tacticalData.stats.totalSamples,
             avgSamplesPerEpisode: parseFloat((tacticalData.stats.totalSamples / tacticalData.stats.totalEpisodes).toFixed(1)),
-            contributors: tacticalData.stats.contributors.size,
+            contributors: null,
             
             // Tactical learning progress per mob type
             mobTypeLearning: Object.keys(tacticalData.weights).map(mob => ({
@@ -875,8 +870,7 @@ export class FederationCoordinator {
       const tacticalData = await this.state.storage.get('tacticalData') || {
         stats: {
           totalEpisodes: 0,
-          totalSamples: 0,
-          contributors: new Set()
+          totalSamples: 0
         },
         weights: {}
       };
@@ -884,7 +878,7 @@ export class FederationCoordinator {
       const stats = {
         totalEpisodes: tacticalData.stats.totalEpisodes,
         totalSamples: tacticalData.stats.totalSamples,
-        contributors: tacticalData.stats.contributors.size,
+        contributors: null,
         avgSamplesPerEpisode: tacticalData.stats.totalEpisodes > 0 
           ? parseFloat((tacticalData.stats.totalSamples / tacticalData.stats.totalEpisodes).toFixed(1))
           : 0,
