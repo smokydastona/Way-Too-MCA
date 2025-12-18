@@ -33,76 +33,96 @@ export class GitHubLogger {
    * Uses unique filenames per round - NEVER overwrites previous rounds
    */
   async logRound(roundData) {
+    const timestamp = new Date().toISOString();
+    const roundNumber = String(roundData.round).padStart(6, '0');
+    const filename = `rounds/round-${roundNumber}.json`;
+
+    // Avoid rewriting round artifacts (keeps GitHub history clean and prevents spam).
+    // If the file already exists, treat this as success.
     try {
-      const timestamp = new Date().toISOString();
-      const roundNumber = String(roundData.round).padStart(6, '0');
-      const filename = `rounds/round-${roundNumber}.json`;
+      const existingResponse = await fetch(`${this.baseUrl}/${filename}`, {
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'MCA-AI-Federation'
+        }
+      });
 
-      const tactics = roundData.tactics || {};
-      const mobTypeSummary = this.#buildMobTypeSummary(tactics);
+      if (existingResponse.ok) {
+        console.log(`📝 GitHub: Round ${roundData.round} already logged (${filename}), skipping`);
+        return { skipped: true, filename };
+      }
+    } catch {
+      // If we can't check existence, continue and attempt the write.
+    }
 
-      const contributors = this.#normalizeContributors(roundData.contributors);
-      
-      const content = JSON.stringify({
-        schema: {
-          name: 'mca-ai-enhanced.federation.round',
-          version: 2,
-          description: 'One file per federation round: metadata + full aggregated tactics snapshot (privacy-safe)'
+    const tactics = roundData.tactics || {};
+    const mobTypeSummary = this.#buildMobTypeSummary(tactics);
+
+    const contributors = this.#normalizeContributors(roundData.contributors);
+
+    const content = JSON.stringify({
+      schema: {
+        name: 'mca-ai-enhanced.federation.round',
+        version: 2,
+        description: 'One file per federation round: metadata + full aggregated tactics snapshot (privacy-safe)'
+      },
+      privacy: {
+        personalData: false,
+        notes: [
+          'No player identifiers (UUID/name/IP) are stored.',
+          'No server identifiers are stored; only aggregate counts.'
+        ]
+      },
+      semantics: {
+        contributors: {
+          meaning: 'Aggregate counts only (no identifiers). `submissions` reflects distinct serverId+mobType contributions for the round; `servers` reflects distinct server contributors for the round.'
         },
-        privacy: {
-          personalData: false,
+        reward: {
+          meaning: 'Average tactical reward signal emitted by the mod. This is an internal, unitless score used for ranking/pruning tactics.',
+          normalized: false,
+          units: 'arbitrary',
           notes: [
-            'No player identifiers (UUID/name/IP) are stored.',
-            'No server identifiers are stored; only aggregate counts.'
+            'Reward is computed client-side and may change across mod versions.',
+            'Do not assume a fixed numeric range; treat as relative within the same schema/version.'
           ]
         },
-        semantics: {
-          contributors: {
-            meaning: 'Aggregate counts only (no identifiers). `submissions` reflects distinct serverId+mobType contributions for the round; `servers` reflects distinct server contributors for the round.'
-          },
-          reward: {
-            meaning: 'Average tactical reward signal emitted by the mod. This is an internal, unitless score used for ranking/pruning tactics.',
-            normalized: false,
-            units: 'arbitrary',
-            notes: [
-              'Reward is computed client-side and may change across mod versions.',
-              'Do not assume a fixed numeric range; treat as relative within the same schema/version.'
-            ]
-          },
-          success: {
-            meaning: 'Binomial outcome aggregated across contributing samples: successes / attempts.',
-            notes: [
-              'For low attempts, rates have low confidence; prefer using (successes, attempts) over rate alone.'
-            ]
-          }
-        },
-        round: roundData.round,
-        timestamp: roundData.timestamp || timestamp,
-        contributors,
-        mobTypes: roundData.mobTypes || [],
-        modelStats: this.#normalizeModelStats(roundData.modelStats || {}),
-        aggregation: {
-          method: roundData.aggregationMethod || 'FedAvg',
-          workerVersion: '3.0.0'
-        },
-        // Full global model snapshot (this is the important data)
-        tactics: this.#normalizeTacticsSnapshot(tactics),
-        // Compact summary for quick human scanning
-        mobTypeSummary,
-        metadata: {
-          loggedAt: timestamp,
-          source: 'federation-coordinator',
-          version: '3.0.0'
+        success: {
+          meaning: 'Binomial outcome aggregated across contributing samples: successes / attempts.',
+          notes: [
+            'For low attempts, rates have low confidence; prefer using (successes, attempts) over rate alone.'
+          ]
         }
-      }, null, 2);
+      },
+      round: roundData.round,
+      timestamp: roundData.timestamp || timestamp,
+      contributors,
+      mobTypes: roundData.mobTypes || [],
+      modelStats: this.#normalizeModelStats(roundData.modelStats || {}),
+      aggregation: {
+        method: roundData.aggregationMethod || 'FedAvg',
+        workerVersion: '3.0.0'
+      },
+      // Full global model snapshot (this is the important data)
+      tactics: this.#normalizeTacticsSnapshot(tactics),
+      // Compact summary for quick human scanning
+      mobTypeSummary,
+      metadata: {
+        loggedAt: timestamp,
+        source: 'federation-coordinator',
+        version: '3.0.0'
+      }
+    }, null, 2);
 
+    try {
       // This creates a NEW file per round - never overwrites
       await this.writeFile(filename, content, `Federation round ${roundData.round} completed`);
-      
       console.log(`📝 GitHub: Logged round ${roundData.round} to ${filename}`);
+      return { skipped: false, filename };
     } catch (error) {
-      // SILENT FAILURE - never break federation
-      console.warn(`⚠️ GitHub logging failed (non-critical): ${error.message}`);
+      // IMPORTANT: allow callers (Durable Object backlog) to retry by propagating failures.
+      console.warn(`⚠️ GitHub round logging failed (non-critical): ${error?.message || error}`);
+      throw error;
     }
   }
 
