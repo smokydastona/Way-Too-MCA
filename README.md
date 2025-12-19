@@ -12,7 +12,7 @@ Mobs learn tactics and adapt in real-time using Double DQN reinforcement learnin
 
 ## 🚀 Quick Start
 
-1. **Download**: Get `Adaptive-Mob-Ai-1.1.148-all.jar` from [releases](https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/releases)
+1. **Download**: Get `Adaptive-Mob-Ai-1.1.174-all.jar` from [releases](https://github.com/smokydastona/Adaptive-Minecraft-Mob-Ai/releases)
 2. **Install**: Drop in your server's `mods/` folder (server-side only, no client required)
 3. **Play**: ML starts learning immediately, federation syncs automatically
 
@@ -175,6 +175,7 @@ See [.github/copilot-instructions.md](.github/copilot-instructions.md) for archi
 
 - **v1.1.79 and earlier**: Classloading deadlock at startup (✅ fixed in v1.1.80)  
 - **Pre-1.1.148**: Some launchers/modpacks could exit during early Mixin init (“silent crash”). Update to v1.1.148+.
+- **Pre-1.1.174**: Some modpacks could log mixin refmap/injection issues that prevented AI goal injection. Update to v1.1.174+.
 - **Fabric support**: Not yet available (planned v1.3.0)
 
 See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for solutions.

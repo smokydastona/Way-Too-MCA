@@ -2,6 +2,14 @@
 
 All notable changes to MCA AI Enhanced will be documented in this file.
 
+## [1.1.174] - 2025-12-18
+
+### Fixed
+- **Critical**: Mixin injection failures in modpacks/production ("No refMap loaded" / missing injections)
+  - Mixin refmap is generated again during build and included in the mod JAR
+  - `adaptivemobai.mixins.json` now declares `adaptivemobai.refmap.json`
+  - `mods.toml` now explicitly registers `adaptivemobai.mixins.json`
+
 ## [1.1.150] - 2025-12-18
 
 ### Fixed
