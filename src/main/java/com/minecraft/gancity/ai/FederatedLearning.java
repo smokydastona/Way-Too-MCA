@@ -292,9 +292,14 @@ public class FederatedLearning {
                     }
                     pendingSubmissions.clear();
                 } else {
-                    // Send a heartbeat ping with dummy data to establish connection
-                    LOGGER.info("📡 Sending heartbeat ping to establish connection");
-                    apiClient.submitTactic("zombie", "heartbeat_init", 0.5f, "success", 0.5f);
+                    // Seed federation after a reset.
+                    // The Worker aggregates after it has >= 3 models in the current round.
+                    // On a single server, the fastest way to kickstart a fresh round is to
+                    // submit 3 bootstrap uploads across distinct mob types.
+                    LOGGER.info("📡 Seeding bootstrap uploads to establish federation state");
+                    apiClient.submitTactic("zombie", "heartbeat_init", 0.5f, "success", 0.5f, true);
+                    apiClient.submitTactic("skeleton", "heartbeat_init", 0.5f, "success", 0.5f, true);
+                    apiClient.submitTactic("creeper", "heartbeat_init", 0.5f, "success", 0.5f, true);
                 }
                 
                 lastSyncTime = System.currentTimeMillis();
