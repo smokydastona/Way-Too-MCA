@@ -603,8 +603,10 @@ export class FederationCoordinator {
 
     // Auto-aggregate if we have enough models and enough time has passed
     const timeSinceLastAgg = Date.now() - this.lastAggregation;
-    if (this.models.size >= 3 && timeSinceLastAgg > 300000) { // 5 minutes
-      console.log(`⏰ Auto-triggering aggregation (5min elapsed, ${this.models.size} models)`);
+    const isFirstGlobalInThisRun = !this.globalModel;
+    if (this.models.size >= 3 && (isFirstGlobalInThisRun || timeSinceLastAgg > 300000)) {
+      const reason = isFirstGlobalInThisRun ? 'initial global model' : '5min elapsed';
+      console.log(`⏰ Auto-triggering aggregation (${reason}, ${this.models.size} models)`);
       await this.aggregate();
     }
 
