@@ -134,7 +134,8 @@ public abstract class MobAIEnhancementMixin {
                 // If a hostile mob is holding a ranged weapon but doesn't have native ranged AI, enable it.
                 // (Examples: zombies with bows, zombies with crossbows, skeletons with tridents)
                 if (!(mob instanceof RangedAttackMob)) {
-                    mob.goalSelector.addGoal(1, new AIEnhancedRangedWeaponGoal(mob, 1.0));
+                    // Priority 0 to reliably preempt vanilla melee goals.
+                    mob.goalSelector.addGoal(0, new AIEnhancedRangedWeaponGoal(mob, 1.0));
                 }
 
                 // Hostile mobs get aggressive AI with environmental tactics
