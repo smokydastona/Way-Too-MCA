@@ -6,6 +6,10 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.Spider;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
 
 import java.util.EnumSet;
@@ -72,6 +76,10 @@ public class EnhancedMeleeGoal extends Goal {
     
     @Override
     public boolean canUse() {
+        // If holding a ranged weapon, let the ranged goal handle combat.
+        if (isHoldingSupportedRangedWeapon(this.mob)) {
+            return false;
+        }
         LivingEntity target = this.mob.getTarget();
         if (target == null || !target.isAlive()) {
             return false;
@@ -82,6 +90,9 @@ public class EnhancedMeleeGoal extends Goal {
     
     @Override
     public boolean canContinueToUse() {
+        if (isHoldingSupportedRangedWeapon(this.mob)) {
+            return false;
+        }
         LivingEntity target = this.mob.getTarget();
         if (target == null || !target.isAlive()) {
             return false;
@@ -90,6 +101,16 @@ public class EnhancedMeleeGoal extends Goal {
             return !this.mob.getNavigation().isDone();
         }
         return this.mob.isWithinRestriction(target.blockPosition());
+    }
+
+    private static boolean isHoldingSupportedRangedWeapon(Mob mob) {
+        if (mob == null) return false;
+        ItemStack main = mob.getMainHandItem();
+        return main.getItem() instanceof BowItem
+            || main.getItem() instanceof CrossbowItem
+            || main.is(Items.BOW)
+            || main.is(Items.CROSSBOW)
+            || main.is(Items.TRIDENT);
     }
     
     @Override

@@ -11,6 +11,7 @@ import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import org.spongepowered.asm.mixin.Mixin;
@@ -222,6 +223,10 @@ public abstract class MobAIEnhancementMixin {
         
         @Override
         public boolean canUse() {
+            // If holding a ranged weapon, let the ranged goal handle combat.
+            if (isHoldingSupportedRangedWeapon(this.mob)) {
+                return false;
+            }
             LivingEntity target = this.mob.getTarget();
             if (target == null) {
                 return false;
@@ -235,6 +240,9 @@ public abstract class MobAIEnhancementMixin {
         
         @Override
         public boolean canContinueToUse() {
+            if (isHoldingSupportedRangedWeapon(this.mob)) {
+                return false;
+            }
             LivingEntity target = this.mob.getTarget();
             if (target == null) {
                 return false;
@@ -717,6 +725,16 @@ public abstract class MobAIEnhancementMixin {
         }
     }
 
+    private static boolean isHoldingSupportedRangedWeapon(Mob mob) {
+        if (mob == null) return false;
+        ItemStack main = mob.getMainHandItem();
+        return main.getItem() instanceof BowItem
+            || main.getItem() instanceof CrossbowItem
+            || main.is(Items.BOW)
+            || main.is(Items.CROSSBOW)
+            || main.is(Items.TRIDENT);
+    }
+
     /**
      * Generic bow ranged goal that works for mobs that don't normally shoot.
      * Avoids using RangedAttackMob so it can be applied to e.g. Zombies.
@@ -730,7 +748,8 @@ public abstract class MobAIEnhancementMixin {
         // Simple defaults to keep behavior predictable
         private static final int MIN_COOLDOWN_TICKS = 25;
         private static final int MAX_COOLDOWN_TICKS = 45;
-        private static final double MIN_SHOOT_DISTANCE_SQR = 16.0; // 4 blocks
+        private static final double PREFERRED_MIN_DISTANCE_SQR = 36.0; // 6 blocks
+        private static final double PREFERRED_MAX_DISTANCE_SQR = 144.0; // 12 blocks
 
         AIEnhancedRangedWeaponGoal(Mob mob, double speedModifier) {
             this.mob = mob;
@@ -762,9 +781,6 @@ public abstract class MobAIEnhancementMixin {
             if (t == null || !t.isAlive()) return false;
             if (!isHoldingSupportedRangedWeapon()) return false;
 
-            // Prefer ranged when there is some distance.
-            if (mob.distanceToSqr(t) < MIN_SHOOT_DISTANCE_SQR) return false;
-
             this.target = t;
             return true;
         }
@@ -773,7 +789,7 @@ public abstract class MobAIEnhancementMixin {
         public boolean canContinueToUse() {
             if (target == null || !target.isAlive()) return false;
             if (!isHoldingSupportedRangedWeapon()) return false;
-            return mob.distanceToSqr(target) >= MIN_SHOOT_DISTANCE_SQR;
+            return true;
         }
 
         @Override
@@ -793,8 +809,20 @@ public abstract class MobAIEnhancementMixin {
 
             mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
 
-            // Light pursuit to keep pressure.
-            mob.getNavigation().moveTo(target, speedModifier);
+            // Maintain a preferred distance band so ranged weapons actually get used.
+            double distSqr = mob.distanceToSqr(target);
+            if (distSqr < PREFERRED_MIN_DISTANCE_SQR) {
+                Vec3 away = mob.position().subtract(target.position());
+                if (away.lengthSqr() < 1.0E-4) {
+                    away = new Vec3(1, 0, 0);
+                }
+                Vec3 retreatPos = mob.position().add(away.normalize().scale(6.0));
+                mob.getNavigation().moveTo(retreatPos.x, retreatPos.y, retreatPos.z, speedModifier);
+            } else if (distSqr > PREFERRED_MAX_DISTANCE_SQR) {
+                mob.getNavigation().moveTo(target, speedModifier);
+            } else {
+                mob.getNavigation().stop();
+            }
 
             if (attackCooldownTicks > 0) {
                 attackCooldownTicks--;
