@@ -1344,6 +1344,10 @@ public class MobBehaviorAI {
                 selectedAction = selectWeightedAction(validActions, genome);
             }
         }
+
+        // Apply visual tactical bias (including Epic Fight signals) to influence actual action selection.
+        // This keeps the action set stable and only nudges toward actions that are already valid.
+        selectedAction = maybeOverrideWithVisualTacticalBias(selectedAction, validActions, qValues, visualRecommendations, visual);
         
         // Boost visually recommended actions
         if (visualRecommendations.contains(selectedAction)) {
@@ -1352,6 +1356,72 @@ public class MobBehaviorAI {
         }
         
         return selectedAction;
+    }
+
+    /**
+     * Optionally override the selected action to a visually recommended action.
+     *
+     * Goal: make perception (especially Epic Fight state) influence real action selection without
+     * introducing new actions or hard dependencies.
+     */
+    private String maybeOverrideWithVisualTacticalBias(
+            String selectedAction,
+            List<String> validActions,
+            float[] qValues,
+            List<String> visualRecommendations,
+            VisualPerception.VisualState visual
+    ) {
+        if (selectedAction == null || validActions == null || validActions.isEmpty()) {
+            return selectedAction;
+        }
+        if (visualRecommendations == null || visualRecommendations.isEmpty()) {
+            return selectedAction;
+        }
+        if (visualRecommendations.contains(selectedAction)) {
+            return selectedAction;
+        }
+
+        float overrideChance = 0.10f;
+        if (visual != null && visual.epicFightDetected && visual.epicFightMode) {
+            // Stronger bias during charge/hold windows (spacing / baiting).
+            if (visual.epicFightHoldingSkill || visual.epicFightChargeRatio > 0.2f) {
+                overrideChance = 0.65f;
+            } else if (visual.epicFightStaminaRatio >= 0.0f && visual.epicFightStaminaRatio < 0.25f) {
+                // Player is low stamina: mobs can safely pressure.
+                overrideChance = 0.40f;
+            } else {
+                overrideChance = 0.20f;
+            }
+        }
+
+        String bestRecommended = null;
+        float bestScore = Float.NEGATIVE_INFINITY;
+
+        for (String recommended : visualRecommendations) {
+            if (!validActions.contains(recommended)) {
+                continue;
+            }
+
+            // Prefer the highest-Q recommended action when Q-values are available.
+            float score = 0.0f;
+            if (qValues != null) {
+                int idx = validActions.indexOf(recommended);
+                if (idx >= 0 && idx < qValues.length) {
+                    score = qValues[idx];
+                }
+            }
+
+            if (bestRecommended == null || score > bestScore) {
+                bestRecommended = recommended;
+                bestScore = score;
+            }
+        }
+
+        if (bestRecommended == null) {
+            return selectedAction;
+        }
+
+        return (random.nextFloat() < overrideChance) ? bestRecommended : selectedAction;
     }
     
     /**
