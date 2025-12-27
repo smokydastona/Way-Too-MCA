@@ -54,7 +54,7 @@ public class ModCompatibility {
     private static boolean checkMod(String modId, String modName) {
         boolean loaded = ModList.get().isLoaded(modId);
         if (loaded) {
-            LOGGER.info("✓ {} detected - Enhanced features enabled", modName);
+            LOGGER.info("✓ {} detected", modName);
         }
         return loaded;
     }
@@ -141,7 +141,7 @@ public class ModCompatibility {
         appendModStatus(report, "Just Enough Items", jeiLoaded,
             "Recipe integration for villager dialogue context");
         appendModStatus(report, "Epic Fight", epicFightLoaded,
-            "Advanced combat move recognition");
+            "Detected (no dedicated integration yet; planned feature)");
         appendModStatus(report, "Player Animator", playerAnimatorLoaded,
             "Enhanced player action detection");
         appendModStatus(report, "Sophisticated Backpacks", sophisticatedBackpacksLoaded,

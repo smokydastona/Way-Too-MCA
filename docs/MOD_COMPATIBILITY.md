@@ -68,7 +68,7 @@ Player with Rings of Protection + Strength Charm:
 ---
 
 ### ⚔️ Epic Fight
-**Status**: ✓ Supported (Planned)  
+**Status**: ⚠️ Planned (No dedicated integration yet)  
 **Download**: [CurseForge](https://www.curseforge.com/minecraft/mc-mods/epic-fight-mod)
 
 **Planned Features**:
@@ -76,6 +76,10 @@ Player with Rings of Protection + Strength Charm:
 - Mobs detect dodge rolls, parries, special attacks
 - AI adapts to player combat style
 - Integration with visual perception system
+
+**Current Reality**:
+- The mod can *coexist* with Epic Fight, but there is no Epic Fight-specific AI hook yet.
+- Installing Epic Fight will not automatically make mobs “understand” Epic Fight mechanics until this integration is implemented.
 
 ---
 
@@ -151,7 +155,7 @@ Mods that completely replace mob AI may conflict:
 ### ❌ Combat Overhauls
 Major combat changes may affect AI predictions:
 - **Better Combat** (partial - AI adapts but may be suboptimal)
-- **Combat Roll** (supported via Epic Fight integration)
+- **Combat Roll** (no dedicated integration yet)
 
 **Resolution**: AI learns new combat patterns over time
 
