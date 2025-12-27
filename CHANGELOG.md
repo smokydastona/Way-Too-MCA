@@ -2,7 +2,7 @@
 
 All notable changes to Adaptive Mob AI will be documented in this file.
 
-## [Unreleased]
+## [1.1.181]
 
 ### Changed
 - Epic Fight (optional): Visual/Epic Fight signals now influence actual action selection (not just recommendations)
