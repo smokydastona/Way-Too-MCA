@@ -621,7 +621,11 @@ function buildDeterministicAnalysis({ status, global, tacticalWeights, tacticalS
     const actions = Object.entries(tactics).map(([action, t]) => {
       const count = typeof t?.count === 'number' ? t.count : 0;
       const successCount = typeof t?.successCount === 'number' ? t.successCount : 0;
+      // `successRate` is a smoothed/blended score from the coordinator.
       const successRate = typeof t?.successRate === 'number' ? t.successRate : (count > 0 ? (successCount / count) : 0);
+
+      // `rawSuccessRate` is derived strictly from counts.
+      const rawSuccessRate = typeof t?.rawSuccessRate === 'number' ? t.rawSuccessRate : (count > 0 ? (successCount / count) : 0);
       const avgReward = typeof t?.avgReward === 'number' ? t.avgReward : 0;
 
       const wilsonLower95 = wilsonLowerBound(successCount, count, 1.96);
@@ -635,6 +639,7 @@ function buildDeterministicAnalysis({ status, global, tacticalWeights, tacticalS
         count,
         successCount,
         successRate,
+        rawSuccessRate,
         avgReward,
         confidence: {
           wilsonLower95
@@ -662,6 +667,7 @@ function buildDeterministicAnalysis({ status, global, tacticalWeights, tacticalS
         score: a.score,
         avgReward: a.avgReward,
         successRate: a.successRate,
+        rawSuccessRate: a.rawSuccessRate,
         attempts: a.count,
         wilsonLower95: a.confidence.wilsonLower95
       }));
@@ -715,6 +721,10 @@ function buildDeterministicAnalysis({ status, global, tacticalWeights, tacticalS
     perMob: analysisByMob,
     crossMob: {
       mostSimilarPairs: similarity.slice(0, 20)
+    },
+    definitions: {
+      successRate: 'Smoothed/blended success score (may differ from successCount/count).',
+      rawSuccessRate: 'Binomial success rate derived from counts: successCount / count.'
     }
   };
 }

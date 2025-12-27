@@ -98,9 +98,12 @@ export class GitHubLogger {
           ]
         },
         success: {
-          meaning: 'Binomial outcome aggregated across contributing samples: successes / attempts.',
+          meaning: 'Per-action outcome tracking aggregated across contributing samples. Counts are always authoritative; rates are derived views.',
           notes: [
-            'For low attempts, rates have low confidence; prefer using (successes, attempts) over rate alone.'
+            '`successCount` and `count` are the authoritative counts (successes and attempts).',
+            '`rawSuccessRate` is the binomial rate derived from counts: successCount / count.',
+            '`successRate` is a smoothed/blended score used for ranking/selection and may differ from rawSuccessRate.',
+            'For low attempts, rates have low confidence; prefer using (successCount, count) over rate alone.'
           ]
         }
       },
@@ -188,14 +191,23 @@ export class GitHubLogger {
       const actions = Object.entries(tactics || {}).map(([action, t]) => {
         const avgReward = typeof t?.avgReward === 'number' ? t.avgReward : 0;
         const count = typeof t?.count === 'number' ? t.count : 0;
+        const successCount = typeof t?.successCount === 'number' ? t.successCount : 0;
+        const failureCount = typeof t?.failureCount === 'number'
+          ? t.failureCount
+          : (count >= successCount ? (count - successCount) : undefined);
+
         const successRate = typeof t?.successRate === 'number'
           ? t.successRate
-          : (typeof t?.successCount === 'number' && count > 0 ? (t.successCount / count) : 0);
+          : (count > 0 ? (successCount / count) : 0);
 
-        return { action, avgReward, count, successRate };
+        const rawSuccessRate = typeof t?.rawSuccessRate === 'number'
+          ? t.rawSuccessRate
+          : (count > 0 ? (successCount / count) : 0);
+
+        return { action, avgReward, count, successCount, failureCount, successRate, rawSuccessRate };
       });
 
-      actions.sort((a, b) => (b.avgReward - a.avgReward) || (b.successRate - a.successRate) || (b.count - a.count));
+      actions.sort((a, b) => (b.avgReward - a.avgReward) || (b.rawSuccessRate - a.rawSuccessRate) || (b.count - a.count));
 
       summary[mobType] = {
         distinctActionsObserved: actions.length,
@@ -271,8 +283,14 @@ export class GitHubLogger {
       for (const [action, t] of Object.entries(tactics || {})) {
         const count = typeof t?.count === 'number' ? t.count : 0;
         const successCount = typeof t?.successCount === 'number' ? t.successCount : 0;
+        // `successRate` is a smoothed/blended score from the coordinator.
         const successRate = typeof t?.successRate === 'number'
           ? t.successRate
+          : (count > 0 ? (successCount / count) : 0);
+
+        // `rawSuccessRate` is the true binomial rate derived from counts.
+        const rawSuccessRate = typeof t?.rawSuccessRate === 'number'
+          ? t.rawSuccessRate
           : (count > 0 ? (successCount / count) : 0);
 
         mobTactics[action] = {
@@ -281,10 +299,14 @@ export class GitHubLogger {
           successCount,
           failureCount: typeof t?.failureCount === 'number' ? t.failureCount : undefined,
           successRate,
+          rawSuccessRate,
           success: {
             successes: successCount,
             attempts: count,
-            rate: successRate
+            // Keep legacy `rate`, but also expose clear naming.
+            rate: successRate,
+            smoothedRate: successRate,
+            rawRate: rawSuccessRate
           },
           legacy: {
             weightedAvgReward: typeof t?.weightedAvgReward === 'number' ? t.weightedAvgReward : undefined
