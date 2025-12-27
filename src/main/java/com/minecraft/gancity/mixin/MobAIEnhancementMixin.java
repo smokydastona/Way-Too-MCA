@@ -5,8 +5,10 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.*;
 import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.entity.projectile.ThrownTrident;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.sounds.SoundEvents;
@@ -128,10 +130,10 @@ public abstract class MobAIEnhancementMixin {
             // Add AI-enhanced combat/survival goal to ALL other mobs
             // Hostile mobs learn combat tactics, passive mobs learn evasion and survival
             if (mob instanceof Monster) {
-                // If a hostile mob is holding a bow but doesn't have native ranged AI, enable shooting.
-                // (Example: zombies with bows)
+                // If a hostile mob is holding a ranged weapon but doesn't have native ranged AI, enable it.
+                // (Examples: zombies with bows, zombies with crossbows, skeletons with tridents)
                 if (!(mob instanceof RangedAttackMob)) {
-                    mob.goalSelector.addGoal(1, new AIEnhancedBowRangedGoal(mob, 1.0));
+                    mob.goalSelector.addGoal(1, new AIEnhancedRangedWeaponGoal(mob, 1.0));
                 }
 
                 // Hostile mobs get aggressive AI with environmental tactics
@@ -719,7 +721,7 @@ public abstract class MobAIEnhancementMixin {
      * Generic bow ranged goal that works for mobs that don't normally shoot.
      * Avoids using RangedAttackMob so it can be applied to e.g. Zombies.
      */
-    private static class AIEnhancedBowRangedGoal extends Goal {
+    private static class AIEnhancedRangedWeaponGoal extends Goal {
         private final Mob mob;
         private final double speedModifier;
         private LivingEntity target;
@@ -730,23 +732,35 @@ public abstract class MobAIEnhancementMixin {
         private static final int MAX_COOLDOWN_TICKS = 45;
         private static final double MIN_SHOOT_DISTANCE_SQR = 16.0; // 4 blocks
 
-        AIEnhancedBowRangedGoal(Mob mob, double speedModifier) {
+        AIEnhancedRangedWeaponGoal(Mob mob, double speedModifier) {
             this.mob = mob;
             this.speedModifier = speedModifier;
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
         }
 
-        private boolean isHoldingBow() {
+        private boolean isHoldingSupportedRangedWeapon() {
             ItemStack main = mob.getMainHandItem();
-            // Accept both real bow item and any item stack that is exactly a bow.
-            return main.getItem() instanceof BowItem || main.is(Items.BOW);
+            return main.getItem() instanceof BowItem
+                || main.getItem() instanceof CrossbowItem
+                || main.is(Items.BOW)
+                || main.is(Items.CROSSBOW)
+                || main.is(Items.TRIDENT);
+        }
+
+        private boolean isHoldingCrossbow() {
+            ItemStack main = mob.getMainHandItem();
+            return main.getItem() instanceof CrossbowItem || main.is(Items.CROSSBOW);
+        }
+
+        private boolean isHoldingTrident() {
+            return mob.getMainHandItem().is(Items.TRIDENT);
         }
 
         @Override
         public boolean canUse() {
             LivingEntity t = mob.getTarget();
             if (t == null || !t.isAlive()) return false;
-            if (!isHoldingBow()) return false;
+            if (!isHoldingSupportedRangedWeapon()) return false;
 
             // Prefer ranged when there is some distance.
             if (mob.distanceToSqr(t) < MIN_SHOOT_DISTANCE_SQR) return false;
@@ -758,7 +772,7 @@ public abstract class MobAIEnhancementMixin {
         @Override
         public boolean canContinueToUse() {
             if (target == null || !target.isAlive()) return false;
-            if (!isHoldingBow()) return false;
+            if (!isHoldingSupportedRangedWeapon()) return false;
             return mob.distanceToSqr(target) >= MIN_SHOOT_DISTANCE_SQR;
         }
 
@@ -796,17 +810,26 @@ public abstract class MobAIEnhancementMixin {
                 return;
             }
 
-            // Shoot a simple arrow like a skeleton would.
             double dx = target.getX() - mob.getX();
             double dy = target.getEyeY() - (mob.getEyeY() + 0.1);
             double dz = target.getZ() - mob.getZ();
 
-            Arrow arrow = new Arrow(level, mob);
-            arrow.setBaseDamage(2.0D);
-            arrow.shoot(dx, dy, dz, 1.6F, 14 - level.getDifficulty().getId() * 4);
-            level.addFreshEntity(arrow);
+            if (isHoldingTrident()) {
+                ThrownTrident trident = new ThrownTrident(level, mob, mob.getMainHandItem().copy());
+                trident.shoot(dx, dy, dz, 1.6F, 14 - level.getDifficulty().getId() * 4);
+                level.addFreshEntity(trident);
+                level.playSound(null, mob.getX(), mob.getY(), mob.getZ(), SoundEvents.DROWNED_SHOOT, SoundSource.HOSTILE, 1.0F, 1.0F);
+            } else {
+                // Bow/crossbow: shoot a simple arrow like a skeleton would.
+                Arrow arrow = new Arrow(level, mob);
+                arrow.setBaseDamage(isHoldingCrossbow() ? 3.0D : 2.0D);
+                arrow.shoot(dx, dy, dz, isHoldingCrossbow() ? 1.9F : 1.6F, 14 - level.getDifficulty().getId() * 4);
+                level.addFreshEntity(arrow);
 
-            level.playSound(null, mob.getX(), mob.getY(), mob.getZ(), SoundEvents.SKELETON_SHOOT, SoundSource.HOSTILE, 1.0F, 1.0F);
+                level.playSound(null, mob.getX(), mob.getY(), mob.getZ(),
+                    isHoldingCrossbow() ? SoundEvents.CROSSBOW_SHOOT : SoundEvents.SKELETON_SHOOT,
+                    SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
 
             attackCooldownTicks = MIN_COOLDOWN_TICKS + mob.getRandom().nextInt(MAX_COOLDOWN_TICKS - MIN_COOLDOWN_TICKS + 1);
         }

@@ -178,10 +178,15 @@ public class MobTierAssignmentHandler {
             mob.setCanPickUpLoot(true);
 
             // Randomly give a melee or ranged weapon.
-            // Keep it simple (bow vs stone sword) to match the requested examples.
+            // Keep it simple and visible: bow/crossbow/trident/sword.
+            int roll = RANDOM.nextInt(4);
             ItemStack weapon;
-            if (RANDOM.nextBoolean()) {
+            if (roll == 0) {
                 weapon = new ItemStack(Items.BOW);
+            } else if (roll == 1) {
+                weapon = new ItemStack(Items.CROSSBOW);
+            } else if (roll == 2) {
+                weapon = new ItemStack(Items.TRIDENT);
             } else {
                 weapon = new ItemStack(Items.STONE_SWORD);
             }
