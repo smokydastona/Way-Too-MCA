@@ -430,6 +430,21 @@ public class FederatedLearning {
             for (Map.Entry<String, Object> entry : tactics.entrySet()) {
                 String mobType = entry.getKey();
                 Map<String, Object> mobData = (Map<String, Object>) entry.getValue();
+
+                // Compatibility: Cloudflare worker publishes per-mob data as an action-map:
+                //   tactics: { zombie: { "melee_attack": {...}, "circle_strafe": {...} }, ... }
+                // Client-side validation expects each mob entry to contain a nested "tactics" object.
+                if (mobData != null && !mobData.containsKey("tactics") && looksLikeActionTacticsMap(mobData)) {
+                    Map<String, Object> wrapped = new HashMap<>();
+                    wrapped.put("tactics", mobData);
+                    mobData = wrapped;
+                }
+
+                if (mobData == null) {
+                    LOGGER.error("❌ Null mob data for {} - skipping entire mob type", mobType);
+                    totalTacticsRejected++;
+                    continue;
+                }
                 
                 // ✅ VALIDATE MOB-LEVEL DATA
                 if (!TacticDataValidator.validateMobData(mobData, mobType)) {
@@ -547,6 +562,31 @@ public class FederatedLearning {
             LOGGER.error("Error applying global tactics: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Detects the worker's mob payload shape where the mob entry is directly a map of
+     * { actionName -> tacticDataMap }.
+     */
+    private boolean looksLikeActionTacticsMap(Map<String, Object> mobData) {
+        if (mobData == null || mobData.isEmpty()) return false;
+
+        int mapValues = 0;
+        for (Map.Entry<String, Object> e : mobData.entrySet()) {
+            String key = e.getKey();
+
+            // If it already contains known per-tactic fields at the top level, it's not an action-map.
+            if ("avgReward".equals(key) || "count".equals(key) || "successRate".equals(key)) {
+                return false;
+            }
+
+            if (!(e.getValue() instanceof Map)) {
+                return false;
+            }
+            mapValues++;
+        }
+
+        return mapValues > 0;
     }
     
     /**
