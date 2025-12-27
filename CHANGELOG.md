@@ -2,7 +2,7 @@
 
 All notable changes to Adaptive Mob AI will be documented in this file.
 
-## [Unreleased]
+## [1.1.192]
 
 ### Fixed
 - Hostile mobs holding bows/crossbows/tridents (including zombies) now reliably use them as ranged weapons instead of defaulting to melee
