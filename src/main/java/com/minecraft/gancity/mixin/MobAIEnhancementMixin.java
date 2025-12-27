@@ -32,6 +32,15 @@ import java.util.EnumSet;
 @SuppressWarnings({"null", "unused"})
 public abstract class MobAIEnhancementMixin {
 
+    static {
+        // Helpful runtime marker to confirm mixin class is loading in production.
+        // (Do not reference Forge classes here.)
+        System.out.println("[AdaptiveMobAI] MobAIEnhancementMixin loaded");
+    }
+
+    private static final String RANGED_GOAL_DEBUG_SEEN = "AdaptiveMobAI_RangedGoalSeen";
+    private static final String RANGED_GOAL_DEBUG_SHOT = "AdaptiveMobAI_RangedGoalShot";
+
     // CRITICAL: Avoid any direct reference to Forge classes (e.g., ModList) in mixin
     // fields or imports. Mixin may load/verify mixin classes very early and linking
     // Forge classes can crash the game before Forge is initialized.
@@ -815,6 +824,18 @@ public abstract class MobAIEnhancementMixin {
         public void tick() {
             if (target == null) return;
 
+            // One-time runtime marker to confirm the ranged goal is actually running.
+            try {
+                net.minecraft.nbt.CompoundTag pd = mob.getPersistentData();
+                if (!pd.getBoolean(RANGED_GOAL_DEBUG_SEEN)) {
+                    pd.putBoolean(RANGED_GOAL_DEBUG_SEEN, true);
+                    System.out.println("[AdaptiveMobAI] RangedGoal active for "
+                        + mob.getType() + " holding=" + mob.getMainHandItem().getItem()
+                        + " target=" + target.getType());
+                }
+            } catch (Throwable ignored) {
+            }
+
             mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
 
             // Maintain a preferred distance band so ranged weapons actually get used.
@@ -852,12 +873,14 @@ public abstract class MobAIEnhancementMixin {
 
             if (isHoldingTrident()) {
                 ThrownTrident trident = new ThrownTrident(level, mob, mob.getMainHandItem().copy());
+                trident.setPos(mob.getX(), mob.getEyeY() - 0.1, mob.getZ());
                 trident.shoot(dx, dy, dz, 1.6F, 14 - level.getDifficulty().getId() * 4);
                 level.addFreshEntity(trident);
                 level.playSound(null, mob.getX(), mob.getY(), mob.getZ(), SoundEvents.DROWNED_SHOOT, SoundSource.HOSTILE, 1.0F, 1.0F);
             } else {
                 // Bow/crossbow: shoot a simple arrow like a skeleton would.
                 Arrow arrow = new Arrow(level, mob);
+                arrow.setPos(mob.getX(), mob.getEyeY() - 0.1, mob.getZ());
                 arrow.setBaseDamage(isHoldingCrossbow() ? 3.0D : 2.0D);
                 arrow.shoot(dx, dy, dz, isHoldingCrossbow() ? 1.9F : 1.6F, 14 - level.getDifficulty().getId() * 4);
                 level.addFreshEntity(arrow);
@@ -865,6 +888,17 @@ public abstract class MobAIEnhancementMixin {
                 level.playSound(null, mob.getX(), mob.getY(), mob.getZ(),
                     isHoldingCrossbow() ? SoundEvents.CROSSBOW_SHOOT : SoundEvents.SKELETON_SHOOT,
                     SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+
+            // One-time runtime marker to confirm a projectile was actually fired.
+            try {
+                net.minecraft.nbt.CompoundTag pd = mob.getPersistentData();
+                if (!pd.getBoolean(RANGED_GOAL_DEBUG_SHOT)) {
+                    pd.putBoolean(RANGED_GOAL_DEBUG_SHOT, true);
+                    System.out.println("[AdaptiveMobAI] RangedGoal fired for "
+                        + mob.getType() + " item=" + mob.getMainHandItem().getItem());
+                }
+            } catch (Throwable ignored) {
             }
 
             attackCooldownTicks = MIN_COOLDOWN_TICKS + mob.getRandom().nextInt(MAX_COOLDOWN_TICKS - MIN_COOLDOWN_TICKS + 1);
