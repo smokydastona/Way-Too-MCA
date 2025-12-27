@@ -143,13 +143,6 @@ public abstract class MobAIEnhancementMixin {
             // Add AI-enhanced combat/survival goal to ALL other mobs
             // Hostile mobs learn combat tactics, passive mobs learn evasion and survival
             if (mob instanceof Monster) {
-                // If a hostile mob is holding a ranged weapon but doesn't have native ranged AI, enable it.
-                // (Examples: zombies with bows, zombies with crossbows, skeletons with tridents)
-                if (!(mob instanceof RangedAttackMob)) {
-                    // Priority 0 to reliably preempt vanilla melee goals.
-                    mob.goalSelector.addGoal(0, new AIEnhancedRangedWeaponGoal(mob, 1.0));
-                }
-
                 // Hostile mobs get aggressive AI with environmental tactics
                 if (behaviorAI != null) {
                     mob.goalSelector.addGoal(2, new AIEnhancedMeleeGoal(mob, 1.0, true, true, false));

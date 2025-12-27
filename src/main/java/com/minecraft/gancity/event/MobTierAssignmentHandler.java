@@ -1,6 +1,7 @@
 package com.minecraft.gancity.event;
 
 import com.minecraft.gancity.GANCityMod;
+import com.minecraft.gancity.ai.GenericRangedWeaponGoal;
 import com.minecraft.gancity.ai.TacticTier;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.particles.ParticleTypes;
@@ -79,6 +80,7 @@ public class MobTierAssignmentHandler {
     private static final String TIER_TAG = "AdaptiveMobAI_Tier";
     private static final String TIER_ASSIGNED_TAG = "AdaptiveMobAI_TierAssigned";
     private static final String UNIVERSAL_WEAPONS_TAG = "AdaptiveMobAI_UniversalWeapons";
+    private static final String GENERIC_RANGED_GOAL_TAG = "AdaptiveMobAI_GenericRangedGoal";
     
     // Compatibility status logged on first use (lazy initialization prevents classloading deadlock)
     
@@ -100,6 +102,10 @@ public class MobTierAssignmentHandler {
         }
         
         Mob mob = (Mob) entity;
+
+        // Ensure the generic ranged-weapon goal exists for non-ranged hostile mobs.
+        // This is Forge-side (not mixin) so it works even in reduced-feature mode.
+        ensureGenericRangedWeaponGoal(mob);
         
         // Use entity's own NBT data (visible in F3) instead of PersistentData
         CompoundTag entityData = new CompoundTag();
@@ -139,6 +145,24 @@ public class MobTierAssignmentHandler {
             mob.getUUID(),
             mob.getHealth(),
             mob.getMaxHealth());
+    }
+
+    private static void ensureGenericRangedWeaponGoal(Mob mob) {
+        if (!(mob instanceof Monster)) {
+            return;
+        }
+        if (mob instanceof RangedAttackMob) {
+            return;
+        }
+
+        CompoundTag persistentData = mob.getPersistentData();
+        if (persistentData.getBoolean(GENERIC_RANGED_GOAL_TAG)) {
+            return;
+        }
+
+        // Priority 0 so it preempts vanilla melee goals when a ranged weapon is held.
+        mob.goalSelector.addGoal(0, new GenericRangedWeaponGoal(mob, 1.0));
+        persistentData.putBoolean(GENERIC_RANGED_GOAL_TAG, true);
     }
     
     /**
