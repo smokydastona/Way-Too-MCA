@@ -118,7 +118,7 @@ public class GANCityCommand {
         source.sendSuccess(() -> Component.literal("§eRecommended Mods for Enhanced AI:§r"), false);
         source.sendSuccess(() -> Component.literal("  • Curios API - Better equipment detection"), false);
         source.sendSuccess(() -> Component.literal("  • FTB Teams - Multiplayer team AI"), false);
-        source.sendSuccess(() -> Component.literal("  • Epic Fight - Planned (currently detection-only)"), false);
+        source.sendSuccess(() -> Component.literal("  • Epic Fight - Basic integration (mode/stamina/charging)"), false);
         source.sendSuccess(() -> Component.literal("  • Alex's Mobs - Extended mob behavior patterns"), false);
         
         return 1;

@@ -44,6 +44,17 @@ public class ModCompatibility {
         playerAnimatorLoaded = checkMod(PLAYER_ANIMATOR_ID, "Player Animator");
         sophisticatedBackpacksLoaded = checkMod(SOPHISTICATED_BACKPACKS_ID, "Sophisticated Backpacks");
         alexsMobsLoaded = checkMod(ALEXS_MOBS_ID, "Alex's Mobs");
+
+        // Initialize integrations (soft dependencies)
+        if (curiosLoaded) {
+            CuriosIntegration.init();
+        }
+        if (ftbTeamsLoaded) {
+            FTBTeamsIntegration.init();
+        }
+        if (epicFightLoaded) {
+            EpicFightIntegration.init();
+        }
         
         logCompatibilitySummary();
     }
@@ -141,7 +152,7 @@ public class ModCompatibility {
         appendModStatus(report, "Just Enough Items", jeiLoaded,
             "Recipe integration for villager dialogue context");
         appendModStatus(report, "Epic Fight", epicFightLoaded,
-            "Detected (no dedicated integration yet; planned feature)");
+            "Basic integration: combat mode + stamina/charging detection");
         appendModStatus(report, "Player Animator", playerAnimatorLoaded,
             "Enhanced player action detection");
         appendModStatus(report, "Sophisticated Backpacks", sophisticatedBackpacksLoaded,

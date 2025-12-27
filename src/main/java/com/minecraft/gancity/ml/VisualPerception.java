@@ -1,6 +1,7 @@
 package com.minecraft.gancity.ml;
 
 import com.minecraft.gancity.compat.CuriosIntegration;
+import com.minecraft.gancity.compat.EpicFightIntegration;
 import com.minecraft.gancity.compat.ModCompatibility;
 import net.minecraft.world.entity.player.Player;
 import java.util.UUID;
@@ -73,6 +74,19 @@ public class VisualPerception {
         state.isSprinting = player.isSprinting();
         state.isSneaking = player.isCrouching();
         state.isBlocking = player.isBlocking();
+
+        // Epic Fight integration (soft dependency)
+        if (ModCompatibility.isEpicFightLoaded()) {
+            EpicFightIntegration.CombatState ef = EpicFightIntegration.getCombatState(player);
+            if (ef != null) {
+                state.epicFightDetected = true;
+                state.epicFightMode = ef.epicFightMode();
+                state.epicFightStaminaRatio = ef.staminaRatio();
+                state.epicFightHoldingSkill = ef.holdingAny();
+                state.epicFightChargeRatio = ef.chargeRatio();
+                state.epicFightTicksSinceLastAction = ef.ticksSinceLastAction();
+            }
+        }
         
         // Cache result
         visualCache.put(playerId, new CachedVisualState(state, currentTime));
@@ -117,6 +131,19 @@ public class VisualPerception {
         
         if (visual.isSneaking) {
             recommendations.add("surround");       // Can't see behind
+        }
+
+        // Epic Fight: if the target is in Epic Fight mode and actively charging/holding,
+        // bias toward spacing and punishing low stamina.
+        if (visual.epicFightDetected && visual.epicFightMode) {
+            if (visual.epicFightHoldingSkill || visual.epicFightChargeRatio > 0.2f) {
+                recommendations.add("hit_and_run");
+                recommendations.add("kite_backward");
+            }
+
+            if (visual.epicFightStaminaRatio >= 0.0f && visual.epicFightStaminaRatio < 0.25f) {
+                recommendations.add("group_rush");
+            }
         }
         
         return recommendations;
@@ -220,6 +247,14 @@ public class VisualPerception {
         // Curios integration fields
         public boolean hasMagicalTrinkets = false;
         public float curioEnhancement = 1.0f;
+
+        // Epic Fight integration fields (do not change ML feature vector size)
+        public boolean epicFightDetected = false;
+        public boolean epicFightMode = false;
+        public boolean epicFightHoldingSkill = false;
+        public float epicFightStaminaRatio = -1.0f;
+        public float epicFightChargeRatio = 0.0f;
+        public int epicFightTicksSinceLastAction = 0;
         
         public float[] toFeatureVector() {
             return new float[] {

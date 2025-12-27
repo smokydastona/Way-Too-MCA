@@ -68,18 +68,16 @@ Player with Rings of Protection + Strength Charm:
 ---
 
 ### ⚔️ Epic Fight
-**Status**: ⚠️ Planned (No dedicated integration yet)  
+**Status**: ✓ Supported (Basic integration)  
 **Download**: [CurseForge](https://www.curseforge.com/minecraft/mc-mods/epic-fight-mod)
 
-**Planned Features**:
-- Advanced combat move recognition
-- Mobs detect dodge rolls, parries, special attacks
-- AI adapts to player combat style
-- Integration with visual perception system
+**Current Features (Implemented)**:
+- Detects Epic Fight mode (server-side)
+- Reads stamina/charging signals and adjusts tactical recommendations (spacing/punish low stamina)
 
-**Current Reality**:
-- The mod can *coexist* with Epic Fight, but there is no Epic Fight-specific AI hook yet.
-- Installing Epic Fight will not automatically make mobs “understand” Epic Fight mechanics until this integration is implemented.
+**Planned Features (Not yet implemented)**:
+- Advanced move recognition (parry/dodge/specials)
+- Deeper animation/state machine awareness
 
 ---
 
