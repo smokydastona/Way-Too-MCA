@@ -2,6 +2,12 @@
 
 All notable changes to Adaptive Mob AI will be documented in this file.
 
+## [1.1.193]
+
+### Fixed
+- Federated Learning: Global tactics downloads no longer get rejected as "poisoned" when the Cloudflare Worker returns per-mob tactics as an action-map
+  - The client now normalizes worker payloads into the expected `{ tactics: ... }` mob schema before running validation (fixes "Missing tactics field" for zombie/skeleton/creeper)
+
 ## [1.1.192]
 
 ### Fixed
